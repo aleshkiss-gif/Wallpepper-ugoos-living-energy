@@ -72,32 +72,32 @@ public class EnergyWallpaper extends WallpaperService {
     if(!egl.eglMakeCurrent(display,surface,surface,context))throw new RuntimeException("EGL makeCurrent failed");
     String vertex="attribute vec2 a; varying vec2 uv; void main(){uv=(a+1.0)*0.5;gl_Position=vec4(a,0.,1.);}";
     String fragment="precision highp float; varying vec2 uv; uniform sampler2D tex; uniform float t;" +
-      "float heightWave(vec2 p){return .48*sin(p.x*19.+p.y*12.+t*.42)+.24*sin(p.x*37.-p.y*17.-t*.59)+.13*sin(p.x*81.+p.y*24.+t*.31)+.09*sin(p.x*123.-t*.67);}" +
       "void main(){" +
-      "vec2 p=vec2(uv.x,1.-uv.y); float d=clamp(p.y,0.,1.);" +
-      "vec3 col=mix(vec3(.015,.31,.48),vec3(.002,.012,.065),pow(d,.82));" +
-      "float h=heightWave(p);" +
-      "float hx=heightWave(p+vec2(.002,0.))-heightWave(p-vec2(.002,0.));" +
-      "float hy=heightWave(p+vec2(0.,.002))-heightWave(p-vec2(0.,.002));" +
-      "vec3 n=normalize(vec3(-hx*18.,-hy*12.,1.));" +
-      "float nearSurface=1.-smoothstep(.02,.33,d);" +
-      "float fresnel=pow(1.-max(0.,n.z),2.);" +
-      "float reflection=pow(max(0.,dot(n,normalize(vec3(.27,-.24,1.)))),18.);" +
-      "float ripples=pow(max(0.,sin(p.x*46.+h*2.2+t*.3)*sin(p.x*73.-h*2.7-t*.4)),4.);" +
-      "col+=nearSurface*(.09+.27*reflection+.12*ripples+.18*fresnel)*vec3(.48,.87,1.);" +
-      "float sun=exp(-pow((p.x-.52+sin(t*.11)*.012)*1.9,2.))*exp(-d*5.8);" +
-      "col+=sun*vec3(.22,.32,.31);" +
+      "vec2 p=vec2(uv.x,1.-uv.y);float d=p.y;" +
+      "vec2 flow1=vec2(p.x*1.7+t*.012,p.y*1.8+t*.009);" +
+      "vec2 flow2=vec2(p.x*2.2-t*.009,p.y*2.1+t*.013);" +
+      "float a=texture2D(tex,fract(flow1)).r;" +
+      "float b=texture2D(tex,fract(flow2)).g;" +
+      "float e=.003;" +
+      "float ax=texture2D(tex,fract(flow1+vec2(e,0.))).r-a;" +
+      "float ay=texture2D(tex,fract(flow1+vec2(0.,e))).r-a;" +
+      "vec3 normal=normalize(vec3(-ax*38.,-ay*38.,1.));" +
+      "float surface=1.-smoothstep(.03,.42,d);" +
+      "vec3 col=mix(vec3(.009,.30,.46),vec3(.002,.013,.057),pow(d,.79));" +
+      "float gloss=pow(max(0.,dot(normal,normalize(vec3(.24,.25,1.)))),22.);" +
+      "float caustic=pow(max(0.,a*.7+b*.3-.49)*2.2,3.);" +
+      "col+=surface*(gloss*.34+caustic*.18)*vec3(.48,.9,1.);" +
+      "float glow=exp(-pow((p.x-.52)*2.4,2.))*exp(-d*6.);" +
+      "col+=glow*vec3(.15,.24,.22);" +
       "float beams=0.;" +
-      "for(int i=0;i<14;i++){" +
-      "float k=float(i);float angle=(k-6.5)*.105;" +
-      "float center=.51+angle*(.13+d*.88)+sin(t*.25+k*1.41)*.019+sin(d*5.+t*.17+k)*.008;" +
-      "float diff=p.x-center;" +
-      "float soft=exp(-diff*diff/(.0012+.00035*mod(k,3.)));" +
-      "beams+=soft*(.75+.25*sin(t*.38+k*1.21))*(1.-smoothstep(.17,.98,d));" +
+      "for(int i=0;i<12;i++){" +
+      "float k=float(i);float angle=(k-5.5)*.11;" +
+      "float pos=.51+angle*(.12+d*.8)+sin(t*.23+k*1.3)*.019;" +
+      "float diff=p.x-pos;" +
+      "beams+=exp(-diff*diff/(.0016+.0004*mod(k,3.)))*(.72+.28*sin(t*.32+k))*(1.-smoothstep(.15,.98,d));" +
       "}" +
-      "col+=beams*.083*vec3(.48,.84,1.);" +
-      "float caustic=pow(max(0.,sin(p.x*61.+h*3.2+t*.36)*sin(p.x*39.-h*2.3-t*.28)),5.);" +
-      "col+=nearSurface*caustic*.09*vec3(.44,.86,1.);" +
+      "col+=beams*.082*vec3(.46,.83,1.);" +
+      "col+=surface*.045*vec3(.3,.72,.91);" +
       "gl_FragColor=vec4(clamp(col,0.,1.),1.);" +
       "}";
     backgroundProgram=program(vertex,fragment);
@@ -110,9 +110,23 @@ public class EnergyWallpaper extends WallpaperService {
     GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_MAG_FILTER,GLES20.GL_LINEAR);
     GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_WRAP_S,GLES20.GL_CLAMP_TO_EDGE);
     GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_WRAP_T,GLES20.GL_CLAMP_TO_EDGE);
-    try(InputStream input=getAssets().open("ocean_bg.jpg")){
-     Bitmap bitmap=BitmapFactory.decodeStream(input);GLUtils.texImage2D(GLES20.GL_TEXTURE_2D,0,bitmap,0);bitmap.recycle();
+    // Deterministic seamless multi-frequency water-height texture.
+    final int n=256;
+    Bitmap water=Bitmap.createBitmap(n,n,Bitmap.Config.ARGB_8888);
+    int[] pixels=new int[n*n];
+    for(int y=0;y<n;y++)for(int x=0;x<n;x++){
+      double u=x*2*Math.PI/n,v=y*2*Math.PI/n;
+      double wave=.5+.17*Math.sin(3*u+2*Math.sin(2*v))
+        +.12*Math.sin(5*v-2*u)+.08*Math.sin(11*u+7*v)
+        +.06*Math.cos(17*v-9*u)+.04*Math.sin(23*u+19*v);
+      int z=Math.max(0,Math.min(255,(int)(wave*255)));
+      pixels[y*n+x]=android.graphics.Color.rgb(z,z,z);
     }
+    water.setPixels(pixels,0,n,0,0,n,n);
+    GLUtils.texImage2D(GLES20.GL_TEXTURE_2D,0,water,0);
+    water.recycle();
+    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_WRAP_S,GLES20.GL_REPEAT);
+    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_WRAP_T,GLES20.GL_REPEAT);
     start=SystemClock.uptimeMillis();ready=true;
    }catch(Exception ignored){ready=false;releaseGL();}
   }
