@@ -208,10 +208,13 @@ public class EnergyWallpaper extends WallpaperService {
     GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_WRAP_S,GLES20.GL_CLAMP_TO_EDGE);
     GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_WRAP_T,GLES20.GL_CLAMP_TO_EDGE);
     Bitmap ocean=null;
-    try(InputStream stream=getAssets().open("ocean_bg.jpg")){
+    String oceanAsset="ocean_bg.jpg";
+    try{getAssets().open("ocean_new.jpg").close();oceanAsset="ocean_new.jpg";}catch(java.io.IOException ignored){}
+    try(InputStream stream=getAssets().open(oceanAsset)){
       ocean=BitmapFactory.decodeStream(stream);
       if(ocean==null)throw new RuntimeException("Cannot decode ocean asset");
       GLUtils.texImage2D(GLES20.GL_TEXTURE_2D,0,ocean,0);
+      Log.i("LivingOcean","Loaded ocean image: "+oceanAsset);
     }catch(Exception assetError){
       Log.e("LivingOcean","Photo asset unavailable; using solid fallback",assetError);
       int[] fallbackPixel={android.graphics.Color.rgb(5,45,75)};
