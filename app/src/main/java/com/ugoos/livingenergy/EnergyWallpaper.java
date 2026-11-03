@@ -72,36 +72,32 @@ public class EnergyWallpaper extends WallpaperService {
     if(!egl.eglMakeCurrent(display,surface,surface,context))throw new RuntimeException("EGL makeCurrent failed");
     String vertex="attribute vec2 a; varying vec2 uv; void main(){uv=(a+1.0)*0.5;gl_Position=vec4(a,0.,1.);}";
     String fragment="precision highp float; varying vec2 uv; uniform sampler2D tex; uniform float t;" +
-      "float waves(float x,float y){return sin(x*19.+t*.48+sin(x*8.-t*.23)*1.7)+.46*sin(x*47.-t*.76+y*12.)+.23*sin(x*94.+t*.51);}" +
+      "float heightWave(vec2 p){return .48*sin(p.x*19.+p.y*12.+t*.42)+.24*sin(p.x*37.-p.y*17.-t*.59)+.13*sin(p.x*81.+p.y*24.+t*.31)+.09*sin(p.x*123.-t*.67);}" +
       "void main(){" +
       "vec2 p=vec2(uv.x,1.-uv.y); float d=clamp(p.y,0.,1.);" +
-      "vec3 col=mix(vec3(.008,.36,.55),vec3(.002,.014,.068),pow(d,.78));" +
-      "float w=waves(p.x,d);" +
-      "float mask=1.-smoothstep(.035,.29,d);" +
-      "float surface=.06+.019*sin(p.x*16.+t*.34)+.011*sin(p.x*42.-t*.64);" +
-      "float crest=exp(-pow((d-surface)*100.,2.));" +
-      "float interference=sin(p.x*103.+w*2.8-t*.76)*sin(p.x*59.-t*.48+w);" +
-      "float shimmer=pow(max(0.,interference),4.);" +
-      "float stripes=pow(max(0.,sin(p.x*135.+w*4.+t*.64)),11.);" +
-      "col+=mask*(.11+.36*shimmer+.16*stripes)*vec3(.38,.85,1.);" +
-      "col+=crest*.37*vec3(.46,.9,1.);" +
-      "float sky=exp(-pow((p.x-.53+sin(t*.12)*.013)*1.75,2.))*exp(-d*6.);" +
-      "col+=sky*vec3(.30,.34,.31);" +
-      "float shafts=0.;" +
-      "for(int i=0;i<16;i++){" +
-      "float k=float(i);float angle=(k-7.5)*.105;" +
-      "float shift=sin(t*.32+k*1.29)*.022+sin(t*.16+k*.89)*.012;" +
-      "float pos=.51+angle*(.12+d*.91)+shift+sin(d*5.3+t*.25+k)*.009;" +
-      "float dist=abs(p.x-pos);" +
-      "float beam=exp(-dist*dist/(.00055+.00024*mod(k,4.)));" +
-      "float pulse=.74+.26*sin(t*.44+k*1.39);" +
-      "shafts+=beam*pulse*(1.-smoothstep(.22,.98,d));" +
+      "vec3 col=mix(vec3(.015,.31,.48),vec3(.002,.012,.065),pow(d,.82));" +
+      "float h=heightWave(p);" +
+      "float hx=heightWave(p+vec2(.002,0.))-heightWave(p-vec2(.002,0.));" +
+      "float hy=heightWave(p+vec2(0.,.002))-heightWave(p-vec2(0.,.002));" +
+      "vec3 n=normalize(vec3(-hx*18.,-hy*12.,1.));" +
+      "float nearSurface=1.-smoothstep(.02,.33,d);" +
+      "float fresnel=pow(1.-max(0.,n.z),2.);" +
+      "float reflection=pow(max(0.,dot(n,normalize(vec3(.27,-.24,1.)))),18.);" +
+      "float ripples=pow(max(0.,sin(p.x*46.+h*2.2+t*.3)*sin(p.x*73.-h*2.7-t*.4)),4.);" +
+      "col+=nearSurface*(.09+.27*reflection+.12*ripples+.18*fresnel)*vec3(.48,.87,1.);" +
+      "float sun=exp(-pow((p.x-.52+sin(t*.11)*.012)*1.9,2.))*exp(-d*5.8);" +
+      "col+=sun*vec3(.22,.32,.31);" +
+      "float beams=0.;" +
+      "for(int i=0;i<14;i++){" +
+      "float k=float(i);float angle=(k-6.5)*.105;" +
+      "float center=.51+angle*(.13+d*.88)+sin(t*.25+k*1.41)*.019+sin(d*5.+t*.17+k)*.008;" +
+      "float diff=p.x-center;" +
+      "float soft=exp(-diff*diff/(.0012+.00035*mod(k,3.)));" +
+      "beams+=soft*(.75+.25*sin(t*.38+k*1.21))*(1.-smoothstep(.17,.98,d));" +
       "}" +
-      "col+=shafts*.12*vec3(.46,.85,1.);" +
-      "float caustic=pow(max(0.,sin(p.x*96.+w*3.1+t*.47)*sin(p.x*53.-t*.34+w*1.7)),4.);" +
-      "col+=caustic*(1.-smoothstep(.08,.54,d))*.12*vec3(.36,.86,1.);" +
-      "float haze=(sin(p.x*29.+d*23.+t*.08)*sin(d*43.-p.x*16.-t*.11))*.5+.5;" +
-      "col+=haze*.014*vec3(.14,.52,.72);" +
+      "col+=beams*.083*vec3(.48,.84,1.);" +
+      "float caustic=pow(max(0.,sin(p.x*61.+h*3.2+t*.36)*sin(p.x*39.-h*2.3-t*.28)),5.);" +
+      "col+=nearSurface*caustic*.09*vec3(.44,.86,1.);" +
       "gl_FragColor=vec4(clamp(col,0.,1.),1.);" +
       "}";
     backgroundProgram=program(vertex,fragment);
