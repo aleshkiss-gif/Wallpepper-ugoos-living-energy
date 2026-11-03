@@ -21,8 +21,8 @@ public class EnergyWallpaper extends WallpaperService {
   Handler handler;
   volatile boolean visible=false,ready=false;
   EGL10 egl;EGLDisplay display;EGLContext context;EGLSurface surface;
-  int backgroundProgram,bubbleProgram,surfaceProgram,texture;
-  FloatBuffer quad,points,surfaceMesh;
+  int backgroundProgram,bubbleProgram,texture;
+  FloatBuffer quad,points;
   long start;
   final int COUNT=1250;
   final Runnable frame=new Runnable(){public void run(){if(!visible)return;try{if(ready)draw();}catch(Exception ignored){}if(visible)handler.postDelayed(this,16);}};
@@ -39,16 +39,6 @@ public class EnergyWallpaper extends WallpaperService {
     particles[i*4+3]=rng.nextFloat();
    }
    points=buffer(particles);
-   // Perspective-projected water mesh, independent of the background and particles.
-   int nx=72,ny=32;
-   float[] mesh=new float[nx*ny*6*2];int m=0;
-   for(int j=0;j<ny;j++)for(int i=0;i<nx;i++){
-     float x0=i/(float)nx,x1=(i+1)/(float)nx;
-     float y0=j/(float)ny,y1=(j+1)/(float)ny;
-     float[] cell={x0,y0,x1,y0,x0,y1,x1,y0,x1,y1,x0,y1};
-     for(float v:cell)mesh[m++]=v;
-   }
-   surfaceMesh=buffer(mesh);
   }
   FloatBuffer buffer(float[] a){ByteBuffer b=ByteBuffer.allocateDirect(a.length*4).order(ByteOrder.nativeOrder());FloatBuffer f=b.asFloatBuffer();f.put(a);f.position(0);return f;}
   @Override public void onSurfaceCreated(SurfaceHolder h){super.onSurfaceCreated(h);handler.post(()->{releaseGL();initGL();});}
@@ -122,27 +112,6 @@ public class EnergyWallpaper extends WallpaperService {
       "gl_FragColor=vec4(clamp(col,0.,1.),1.);" +
       "}";
     backgroundProgram=program(vertex,fragment);
-    // Surface mesh: vertex waves with independent perspective shading.
-    String sv="attribute vec2 a;uniform float t;varying vec2 world;varying vec3 norm;varying float fade;"+
-      "float h(vec2 p){return .09*sin(p.x*12.+p.y*6.+t*.43)+.047*sin(p.x*24.-p.y*13.-t*.61)+.024*sin(p.x*48.+p.y*19.+t*.83);}"+
-      "void main(){vec2 p=a;float z=h(p);float e=.003;"+
-      "float dx=(h(p+vec2(e,0.))-h(p-vec2(e,0.)))/(2.*e);"+
-      "float dy=(h(p+vec2(0.,e))-h(p-vec2(0.,e)))/(2.*e);"+
-      "norm=normalize(vec3(-dx*.16,-dy*.16,1.));world=p;"+
-      "float horizon=1.-pow(1.-p.y,2.2);"+
-      "float screenY=.93-.82*horizon+z*.10*(1.-p.y);"+
-      "gl_Position=vec4(p.x*2.-1.,screenY*2.-1.,0.,1.);"+
-      "fade=1.-smoothstep(.65,1.,p.y);}";
-    String sf="precision mediump float;varying vec2 world;varying vec3 norm;varying float fade;uniform float t;"+
-      "void main(){vec3 n=normalize(norm);vec3 l=normalize(vec3(.26,.34,1.));"+
-      "float spec=pow(max(0.,dot(n,l)),42.);"+
-      "float rip=pow(max(0.,sin(world.x*72.+world.y*38.+t*.52)*sin(world.x*37.-world.y*51.-t*.37)),7.);"+
-      "float fres=pow(1.-max(0.,n.z),3.);"+
-      "vec3 base=mix(vec3(.006,.065,.13),vec3(.018,.29,.43),clamp(world.y*.9,0.,1.));"+
-      "vec3 color=base+vec3(.43,.87,1.)*(spec*.52+rip*.14+fres*.19);"+
-      "gl_FragColor=vec4(color,.94*fade);}";
-    surfaceProgram=program(sv,sf);
-
     String bubbleVertex="attribute vec4 a; uniform float t; uniform float scale; varying float alpha; varying float rim; void main(){float speed=.06+a.z*.13;float y=fract(a.y+t*speed);float x=a.x+sin(t*(.5+a.w)+a.y*9.)*.012;gl_Position=vec4(x*2.-1.,y*2.-1.,0.,1.);gl_PointSize=(1.5+a.z*a.z*9.)*scale;alpha=.25+a.z*.6;rim=a.z;}";
     String bubbleFrag="precision mediump float; varying float alpha;varying float rim;void main(){vec2 q=gl_PointCoord-.5;float r=length(q)*2.;float edge=smoothstep(.72,.93,r)*(1.-smoothstep(.94,1.,r));float center=(1.-smoothstep(.0,.65,r))*.2;float shine=1.-smoothstep(.04,.23,length(q-vec2(-.2,-.2)));float a=(edge+center+shine*.65)*alpha;gl_FragColor=vec4(.65,.9,1.,a);}";
     bubbleProgram=program(bubbleVertex,bubbleFrag);
@@ -186,14 +155,6 @@ public class EnergyWallpaper extends WallpaperService {
    GLES20.glUniform1i(GLES20.glGetUniformLocation(backgroundProgram,"tex"),0);
    GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP,0,4);GLES20.glDisableVertexAttribArray(loc);
    GLES20.glEnable(GLES20.GL_BLEND);GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA,GLES20.GL_ONE_MINUS_SRC_ALPHA);
-   GLES20.glUseProgram(surfaceProgram);
-   int sloc=GLES20.glGetAttribLocation(surfaceProgram,"a");
-   surfaceMesh.position(0);GLES20.glEnableVertexAttribArray(sloc);
-   GLES20.glVertexAttribPointer(sloc,2,GLES20.GL_FLOAT,false,0,surfaceMesh);
-   GLES20.glUniform1f(GLES20.glGetUniformLocation(surfaceProgram,"t"),t);
-   GLES20.glDrawArrays(GLES20.GL_TRIANGLES,0,surfaceMesh.capacity()/2);
-   GLES20.glDisableVertexAttribArray(sloc);
-
    GLES20.glUseProgram(bubbleProgram);
    loc=GLES20.glGetAttribLocation(bubbleProgram,"a");
    points.position(0);GLES20.glEnableVertexAttribArray(loc);GLES20.glVertexAttribPointer(loc,4,GLES20.GL_FLOAT,false,0,points);
