@@ -25,25 +25,28 @@ public class EnergyWallpaper extends WallpaperService {
   int backgroundProgram,bubbleProgram,texture;
   FloatBuffer quad,points;
   long start;
-  final int COUNT=1750;
+  final int COUNT=3200;
   final Runnable frame=new Runnable(){public void run(){if(!visible)return;try{if(ready)draw();}catch(Exception error){Log.e("LivingOcean","GPU frame failed",error);ready=false;}if(visible)handler.postDelayed(this,16);}};
   OceanEngine(){
    thread.start();handler=new Handler(thread.getLooper());
    float[] vertices={-1,-1,1,-1,-1,1,1,1};
    quad=buffer(vertices);
    float[] particles=new float[COUNT*4];Random rng=new Random(731);
-   // Irregular plumes and dispersed particles, with broad size distribution.
-   float[] centers={.08f,.21f,.39f,.62f,.84f,.94f};
+   // Depth-weighted field: 76% distant microbubbles, 19% mid-depth, 5% foreground.
+   float[] centers={.07f,.19f,.35f,.52f,.71f,.88f,.96f};
    for(int i=0;i<COUNT;i++){
+     float layer=rng.nextFloat();
      float plume=centers[rng.nextInt(centers.length)];
-     float scatter=rng.nextFloat();
-     float x=(scatter<.24f?rng.nextFloat():plume+(float)rng.nextGaussian()*(.025f+.09f*rng.nextFloat()));
-     particles[i*4]=Math.max(.01f,Math.min(.99f,x));
+     float spread=layer<.76f?.16f:layer<.95f?.09f:.045f;
+     float x=rng.nextFloat()<.42f?rng.nextFloat():
+       plume+(float)rng.nextGaussian()*spread;
+     particles[i*4]=Math.max(.005f,Math.min(.995f,x));
      particles[i*4+1]=rng.nextFloat();
-     // Most are tiny, some medium and a few large foreground bubbles.
-     float category=rng.nextFloat();
-     particles[i*4+2]=category<.73f?rng.nextFloat()*.45f:
-       category<.95f?.45f+rng.nextFloat()*.35f:.8f+rng.nextFloat()*.2f;
+     // z encodes optical depth: small values are distant, larger values near camera.
+     particles[i*4+2]=layer<.76f?
+       .025f+rng.nextFloat()*.24f:
+       layer<.95f?.30f+rng.nextFloat()*.39f:
+       .73f+rng.nextFloat()*.27f;
      particles[i*4+3]=rng.nextFloat();
    }
    points=buffer(particles);
@@ -156,11 +159,11 @@ public class EnergyWallpaper extends WallpaperService {
       "}";
     try{backgroundProgram=program(vertex,fragment);}catch(Exception shaderError){Log.e("LivingOcean","Advanced water shader failed, using safe renderer",shaderError);backgroundProgram=program(vertex,safeFragment);}
     String bubbleVertex="attribute vec4 a;uniform float t;uniform float scale;varying float alpha;varying float seed;varying float depth;"+
-      "void main(){float velocity=.038+(.85-a.z)*.10+a.w*.04;float y=fract(a.y+t*velocity);"+
-      "float drift=sin(t*(.37+a.w*.55)+a.y*9.)*.009+sin(t*.18+a.w*24.)*.012;"+
+      "void main(){float velocity=.018+a.z*.11+a.w*.025;float y=fract(a.y+t*velocity);"+
+      "float drift=(.003+a.z*.014)*sin(t*(.3+a.w*.6)+a.y*9.)+(.002+a.z*.008)*sin(t*.19+a.w*24.);"+
       "float x=a.x+drift;gl_Position=vec4(x*2.-1.,y*2.-1.,0.,1.);"+
-      "float r=mix(1.4,22.,pow(a.z,3.3));gl_PointSize=r*scale;"+
-      "alpha=mix(.23,.68,a.z);seed=a.w;depth=a.z;}";
+      "float r=mix(1.25,24.,pow(a.z,2.65));gl_PointSize=max(1.,r*scale);"+
+      "alpha=mix(.11,.71,pow(a.z,.85));seed=a.w;depth=a.z;}";
     String bubbleFrag="precision mediump float;varying float alpha;varying float seed;varying float depth;"+
       "void main(){vec2 q=gl_PointCoord-.5;"+
       "q.x*=1.+.10*sin(seed*31.);q.y*=1.+.13*cos(seed*43.);"+
@@ -169,8 +172,10 @@ public class EnergyWallpaper extends WallpaperService {
       "float shell=smoothstep(.66,.87,r)*(1.-smoothstep(.91,1.,r));"+
       "float glint=exp(-length((q-vec2(-.20,-.23))*9.)*length((q-vec2(-.20,-.23))*9.));"+
       "float secondary=exp(-length((q-vec2(.25,.18))*15.)*length((q-vec2(.25,.18))*15.));"+
-      "float opacity=(shell*.64+glint*.72+secondary*.22+(.07+.12*depth)*edge)*alpha;"+
-      "gl_FragColor=vec4(mix(vec3(.52,.79,.94),vec3(.89,.97,1.),glint),opacity*edge);}";
+      "float far=1.-smoothstep(.12,.38,depth);"+
+      "float haze=(1.-smoothstep(.15,.98,r))*.20*far;"+
+      "float opacity=(shell*.64+glint*.72+secondary*.22+(.07+.12*depth)*edge+haze)*alpha;"+
+      "gl_FragColor=vec4(mix(vec3(.45,.73,.85),vec3(.89,.97,1.),glint*.8+depth*.15),opacity*edge);}";
     bubbleProgram=program(bubbleVertex,bubbleFrag);
     int[] ids=new int[1];GLES20.glGenTextures(1,ids,0);texture=ids[0];
     GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,texture);
