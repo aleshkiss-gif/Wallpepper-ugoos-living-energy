@@ -129,8 +129,8 @@ public class EnergyWallpaper extends WallpaperService {
       "}";
     String fragment="precision highp float;varying vec2 uv;uniform sampler2D tex;uniform float t;\nfloat hash(float x){return fract(sin(x*127.13)*43758.5453);}\nfloat wave(vec2 p){return .18*sin(p.x*1.5+t*.62)+.105*sin(p.y*2.1-p.x*.65-t*.49)+.055*sin(p.x*5.8+p.y*2.4+t*.86);}\nvoid main(){vec2 p=vec2(uv.x,1.-uv.y);float d=p.y;vec3 c=mix(vec3(.014,.29,.36),vec3(.001,.012,.042),pow(d,.83));float sun=exp(-pow((p.x-.51)*2.25,2.))*exp(-d*3.7);c+=sun*vec3(.24,.21,.105);float beams=0.;for(int i=0;i<48;i++){float k=float(i);float x=.08+.84*hash(k+1.)+(hash(k+7.)-.5)*d*.25+sin(t*.16+k)*.005;float w=.000055+d*.00046+hash(k+14.)*.0002;beams+=exp(-pow(p.x-x,2.)/w)*(.4+.6*hash(k+31.));}c+=beams*.025*exp(-d*2.8)*vec3(.79,.76,.55);vec2 q=p*vec2(3.1,2.2);float wv=wave(q*2.);vec2 uv1=fract(q+vec2(t*.029,-t*.021)+wv*.024);vec2 uv2=fract(q*1.71+vec2(-t*.041,t*.036));float h=texture2D(tex,uv1).r*.6+texture2D(tex,uv2).r*.4;float caustic=pow(max(0.,h-.48)*2.8,4.);c+=caustic*exp(-d*3.8)*vec3(.19,.47,.49);gl_FragColor=vec4(clamp(c,0.,1.),1.);}";
     try{backgroundProgram=program(vertex,fragment);}catch(Exception shaderError){Log.e("LivingOcean","Advanced water shader failed, using safe renderer",shaderError);backgroundProgram=program(vertex,safeFragment);}
-    String waterVertex="precision highp float;attribute vec2 a;uniform float t;varying vec3 normal;varying vec2 pos;varying vec3 world;varying float fade;\nvoid main(){\nvec2 p=vec2((a.x-.5)*22.,a.y*28.+.4);\nvec2 d1=normalize(vec2(.94,.34)),d2=normalize(vec2(-.48,.88)),d3=normalize(vec2(.71,-.70)),d4=normalize(vec2(.24,.97));\nfloat q1=dot(d1,p)*1.23+t*.73,q2=dot(d2,p)*1.86-t*.94,q3=dot(d3,p)*3.8+t*1.31,q4=dot(d4,p)*7.7-t*1.76;\nfloat h=.16*sin(q1)+.09*sin(q2)+.035*sin(q3)+.012*sin(q4);\np+=.09*d1*cos(q1)+.04*d2*cos(q2)+.01*d3*cos(q3);\nvec2 g=.16*1.23*d1*cos(q1)+.09*1.86*d2*cos(q2)+.035*3.8*d3*cos(q3)+.012*7.7*d4*cos(q4);\nnormal=normalize(vec3(g.x,-1.,g.y));pos=a;world=vec3(p.x,3.8+h,p.y);\nfloat z=p.y+2.5;\nfloat perspective=1./(1.+z*.09);\nfloat sx=p.x*.24*perspective;\nfloat sy=.91-(.16+z*.072-h*.18)*perspective;\ngl_Position=vec4(sx,sy,0.,1.);\nfade=1.-smoothstep(.48,.92,a.y);\n}";
-    String waterFragment="precision highp float;uniform float t;varying vec3 normal;varying vec2 pos;varying vec3 world;varying float fade;\nvoid main(){\nvec3 n=normalize(normal),v=normalize(vec3(-world.x,-3.8,-world.z)),l=normalize(vec3(.13,-1.,.2));\nfloat f=.025+.975*pow(1.-max(0.,dot(n,v)),5.);\nfloat spec=pow(max(0.,dot(reflect(-l,n),v)),54.);\nfloat glow=exp(-pow((pos.x-.51)*2.6,2.));\nfloat shimmer=pow(max(0.,sin(world.x*13.+world.z*8.+t*.72)*sin(world.x*9.-world.z*11.-t*.58)),16.);\nvec3 aqua=vec3(.015,.21,.27),gold=vec3(1.,.73,.36);\nvec3 col=aqua+(.7*spec+.12*shimmer+.08*f)*mix(vec3(.2,.67,.8),gold,glow);\ncol+=gold*glow*.09*exp(-pos.y*3.);\ngl_FragColor=vec4(clamp(col,0.,1.),.78*fade);\n}";
+    String waterVertex="precision highp float;attribute vec2 a;uniform float t;varying vec3 normal;varying vec2 pos;varying vec3 world;varying float distanceFade;\nvoid main(){\nvec2 p=vec2((a.x-.5)*24.,a.y*24.+.35);vec2 original=p;\nvec2 d1=normalize(vec2(.94,.34));vec2 d2=normalize(vec2(-.48,.88));vec2 d3=normalize(vec2(.71,-.70));vec2 d4=normalize(vec2(.24,.97));\nfloat ph1=dot(d1,p)*1.23+t*.73;float ph2=dot(d2,p)*1.86-t*.94;float ph3=dot(d3,p)*3.8+t*1.31;float ph4=dot(d4,p)*7.7-t*1.76;\nfloat h=.23*sin(ph1)+.13*sin(ph2)+.058*sin(ph3)+.021*sin(ph4);\nvec2 shift=.13*d1*cos(ph1)+.075*d2*cos(ph2)+.022*d3*cos(ph3);\np+=shift;\nvec2 g=.23*1.23*d1*cos(ph1)+.13*1.86*d2*cos(ph2)+.058*3.8*d3*cos(ph3)+.021*7.7*d4*cos(ph4);\nnormal=normalize(vec3(g.x,-1.,g.y));pos=a;world=vec3(p.x,2.15+h,p.y);\nfloat inv=1./(1.+p.y*.095);\nfloat sx=p.x*.25*inv;\nfloat sy=.96-(.20+p.y*.18-h*.56)*inv;\ngl_Position=vec4(sx,sy,0.,1.);\ndistanceFade=1.-smoothstep(.72,1.,a.y);\n}";
+    String waterFragment="precision highp float;uniform float t;varying vec3 normal;varying vec2 pos;varying vec3 world;varying float distanceFade;\nvoid main(){\nvec3 n=normalize(normal);\nvec3 v=normalize(vec3(-world.x,-2.15,-world.z));\nvec3 l=normalize(vec3(.16,-1.,.24));\nfloat facing=max(0.,dot(n,v));\nfloat fres=.025+.975*pow(1.-facing,5.);\nfloat glint=pow(max(0.,dot(reflect(-l,n),v)),72.);\nfloat goldArea=exp(-pow((pos.x-.53)*2.3,2.));\nfloat caustic=pow(max(0.,sin(world.x*12.+world.z*7.+t*.82)*sin(world.x*7.-world.z*14.-t*.68)),12.);\nfloat fine=pow(max(0.,sin(world.x*31.+world.z*21.-t*1.4)),30.);\nvec3 deep=vec3(.005,.075,.13);vec3 teal=vec3(.025,.35,.42);\nvec3 base=mix(deep,teal,clamp(pos.y*.65,0.,1.));\nvec3 sunlight=mix(vec3(.28,.83,.95),vec3(1.,.77,.37),goldArea);\nvec3 color=base+sunlight*(.95*glint+.19*caustic+.15*fine+.23*fres);\ncolor+=vec3(1.,.71,.28)*goldArea*.12*exp(-pos.y*4.);\ngl_FragColor=vec4(clamp(color,0.,1.),.99*distanceFade);\n}";
     try{surfaceProgram=program(waterVertex,waterFragment);}
     catch(Exception surfaceError){Log.e("LivingOcean","3D mesh shader unavailable; background remains active",surfaceError);surfaceProgram=0;}
     String bubbleVertex="attribute vec4 a;uniform float t;uniform float scale;varying float alpha;varying float seed;varying float depth;"+
@@ -185,16 +185,10 @@ public class EnergyWallpaper extends WallpaperService {
    int[] viewport=new int[4];GLES20.glGetIntegerv(GLES20.GL_VIEWPORT,viewport,0);
    if(viewport[2]==0||viewport[3]==0){android.graphics.Rect r=getSurfaceHolder().getSurfaceFrame();GLES20.glViewport(0,0,r.width(),r.height());}
    float t=(SystemClock.uptimeMillis()-start)/1000f;
-   GLES20.glClearColor(0,0,.05f,1);GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-   GLES20.glUseProgram(backgroundProgram);
-   int loc=GLES20.glGetAttribLocation(backgroundProgram,"a");
-   quad.position(0);GLES20.glEnableVertexAttribArray(loc);GLES20.glVertexAttribPointer(loc,2,GLES20.GL_FLOAT,false,0,quad);
-   GLES20.glUniform1f(GLES20.glGetUniformLocation(backgroundProgram,"t"),t);
-   GLES20.glActiveTexture(GLES20.GL_TEXTURE0);GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,texture);
-   GLES20.glUniform1i(GLES20.glGetUniformLocation(backgroundProgram,"tex"),0);
-
-   GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP,0,4);GLES20.glDisableVertexAttribArray(loc);
-   GLES20.glEnable(GLES20.GL_BLEND);GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA,GLES20.GL_ONE_MINUS_SRC_ALPHA);
+   GLES20.glClearColor(.002f,.009f,.025f,1f);
+   GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+   GLES20.glEnable(GLES20.GL_BLEND);
+   GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA,GLES20.GL_ONE_MINUS_SRC_ALPHA);
    if(surfaceProgram!=0){
      GLES20.glUseProgram(surfaceProgram);
      int meshLoc=GLES20.glGetAttribLocation(surfaceProgram,"a");
@@ -206,13 +200,7 @@ public class EnergyWallpaper extends WallpaperService {
        GLES20.glDisableVertexAttribArray(meshLoc);
      }
    }
-   GLES20.glUseProgram(bubbleProgram);
-   loc=GLES20.glGetAttribLocation(bubbleProgram,"a");
-   points.position(0);GLES20.glEnableVertexAttribArray(loc);GLES20.glVertexAttribPointer(loc,4,GLES20.GL_FLOAT,false,0,points);
-   GLES20.glUniform1f(GLES20.glGetUniformLocation(bubbleProgram,"t"),t);
-   GLES20.glUniform1f(GLES20.glGetUniformLocation(bubbleProgram,"scale"),Math.max(1f,viewport[2]/1920f));
-   GLES20.glDrawArrays(GLES20.GL_POINTS,0,COUNT);
-   GLES20.glDisableVertexAttribArray(loc);GLES20.glDisable(GLES20.GL_BLEND);
+   GLES20.glDisable(GLES20.GL_BLEND);
    if(!egl.eglSwapBuffers(display,surface)){Log.e("LivingOcean","EGL swap failed: "+egl.eglGetError());ready=false;}
   }
   void releaseGL(){
