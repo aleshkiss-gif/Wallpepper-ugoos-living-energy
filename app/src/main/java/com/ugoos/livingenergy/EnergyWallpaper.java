@@ -164,24 +164,32 @@ public class EnergyWallpaper extends WallpaperService {
       "gl_FragColor=vec4(clamp(col,0.,1.),1.);" +
       "}";
     try{backgroundProgram=program(vertex,fragment);}catch(Exception shaderError){Log.e("LivingOcean","Advanced water shader failed, using safe renderer",shaderError);backgroundProgram=program(vertex,safeFragment);}
-    String waterVertex="attribute vec2 a;uniform float t;varying vec3 normal;varying vec2 pos;varying float distanceFade;"+
-      "float height(vec2 p){return .075*sin(p.x*15.+p.y*5.+t*.48)+.039*sin(p.x*31.-p.y*12.-t*.71)+.018*sin(p.x*59.+p.y*17.+t*.93);}"+
-      "void main(){vec2 p=a;float h=height(p);float e=.002;"+
+    String waterVertex="attribute vec2 a;uniform float t;varying vec3 normal;varying vec2 pos;varying float distanceFade;varying vec3 world;"+
+      "float height(vec2 p){return .11*sin(p.x*9.+p.y*3.+t*.55)+.055*sin(p.x*19.-p.y*7.-t*.77)+.025*sin(p.x*43.+p.y*13.+t*1.12);}"+
+      "void main(){vec2 p=a;float h=height(p);float e=.003;"+
       "float dx=(height(p+vec2(e,0.))-height(p-vec2(e,0.)))/(2.*e);"+
       "float dz=(height(p+vec2(0.,e))-height(p-vec2(0.,e)))/(2.*e);"+
-      "normal=normalize(vec3(-dx*.18,1.,-dz*.18));pos=p;"+
-      "float y=.98-.58*pow(p.y,1.7)+h*(.17-.10*p.y);"+
-      "gl_Position=vec4(p.x*2.-1.,y*2.-1.,0.,1.);"+
-      "distanceFade=1.-smoothstep(.62,1.,p.y);}";
-    String waterFragment="precision mediump float;uniform float t;varying vec3 normal;varying vec2 pos;varying float distanceFade;"+
-      "void main(){vec3 n=normalize(normal);vec3 sun=normalize(vec3(.13,1.,.22));"+
-      "float spec=pow(max(0.,dot(reflect(-sun,n),normalize(vec3(0.,1.,.35)))),30.);"+
-      "float gold=exp(-pow((pos.x-.52)*2.3,2.));"+
-      "float rip=pow(max(0.,sin(pos.x*86.+pos.y*27.+t*.7)*sin(pos.x*43.-pos.y*49.-t*.48)),8.);"+
-      "float fres=pow(1.-abs(n.y),2.);"+
-      "vec3 base=mix(vec3(.005,.075,.12),vec3(.016,.29,.36),pos.y*.75);"+
-      "vec3 color=base+(.30*spec+.12*rip+.11*fres)*mix(vec3(.29,.78,.92),vec3(1.,.76,.35),gold);"+
-      "gl_FragColor=vec4(color,.96*distanceFade);}";
+      "normal=normalize(vec3(-dx*.12,-1.,-dz*.12));pos=p;"+
+      "float depth=.22+5.5*p.y*p.y;"+
+      "float perspective=1./(1.+depth*.18);"+
+      "float x=(p.x-.5)*2.7*perspective;"+
+      "float y=.92-1.52*p.y+(.14+.15*p.y)*h;"+
+      "world=vec3(x,y,depth);"+
+      "gl_Position=vec4(x,y,0.,1.);"+
+      "distanceFade=1.-smoothstep(.67,1.,p.y);}";
+    String waterFragment="precision highp float;uniform float t;varying vec3 normal;varying vec2 pos;varying float distanceFade;varying vec3 world;"+
+      "void main(){vec3 n=normalize(normal);vec3 sun=normalize(vec3(.09,-1.,.22));"+
+      "vec3 eye=normalize(vec3(-world.x,-.4,-2.));"+
+      "float spec=pow(max(0.,dot(reflect(-sun,n),eye)),13.);"+
+      "float central=exp(-pow((pos.x-.5)*2.4,2.));"+
+      "float rip=pow(max(0.,sin(pos.x*103.+pos.y*21.+t*.83)*sin(pos.x*37.-pos.y*67.-t*.58)),6.);"+
+      "float fold=pow(max(0.,sin(pos.x*51.+pos.y*37.+t*.44)),12.);"+
+      "float fres=pow(1.-abs(dot(n,eye)),2.);"+
+      "vec3 base=mix(vec3(.006,.12,.18),vec3(.012,.33,.39),pos.y*.65);"+
+      "vec3 gold=vec3(1.,.73,.32);vec3 aqua=vec3(.22,.78,.89);"+
+      "vec3 color=base+(.48*spec+.19*rip+.15*fold+.15*fres)*mix(aqua,gold,central*.9);"+
+      "color+=central*exp(-pos.y*4.)*.11*gold;"+
+      "gl_FragColor=vec4(clamp(color,0.,1.),.98*distanceFade);}";
     try{surfaceProgram=program(waterVertex,waterFragment);}
     catch(Exception surfaceError){Log.e("LivingOcean","3D mesh shader unavailable; background remains active",surfaceError);surfaceProgram=0;}
     String bubbleVertex="attribute vec4 a;uniform float t;uniform float scale;varying float alpha;varying float seed;varying float depth;"+
