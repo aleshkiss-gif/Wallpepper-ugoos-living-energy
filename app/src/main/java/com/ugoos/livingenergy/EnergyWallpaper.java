@@ -127,69 +127,10 @@ public class EnergyWallpaper extends WallpaperService {
       "col+=gold*.025*vec3(1.,.78,.41);" +
       "gl_FragColor=vec4(clamp(col,0.,1.),1.);" +
       "}";
-    String fragment="precision highp float;varying vec2 uv;uniform sampler2D tex;uniform float t;" +
-      "float hash(float x){return fract(sin(x*127.13)*43758.5453);}" +
-      "float waves(vec2 p){return .35*sin(p.x*15.+p.y*7.+t*.56)+.22*sin(p.x*27.-p.y*14.-t*.74)+.12*sin(p.x*49.+p.y*19.+t*.93);}" +
-      "void main(){" +
-      "vec2 p=vec2(uv.x,1.-uv.y);float d=p.y;" +
-      "vec2 q=vec2(p.x*2.4,d*1.9);float w=waves(q);" +
-      "vec2 f1=fract(q*.8+vec2(t*.045,t*.021)+vec2(w*.026));" +
-      "vec2 f2=fract(q*1.63+vec2(-t*.038,t*.032));" +
-      "float h1=texture2D(tex,f1).r;float h2=texture2D(tex,f2).r;" +
-      "float e=.004;" +
-      "vec2 grad=vec2(texture2D(tex,fract(f1+vec2(e,0.))).r-texture2D(tex,fract(f1-vec2(e,0.))).r,texture2D(tex,fract(f1+vec2(0.,e))).r-texture2D(tex,fract(f1-vec2(0.,e))).r);" +
-      "vec3 n=normalize(vec3(-grad*21.-vec2(cos(q.x*15.+t*.56),sin(q.y*7.-t*.44))*.16,1.));" +
-      "float surface=1.-smoothstep(.02,.39,d);" +
-      "vec3 col=mix(vec3(.007,.26,.34),vec3(.001,.012,.044),pow(d,.88));" +
-      "float sky=exp(-pow((p.x-.52)*1.38,4.))*exp(-d*3.8);" +
-      "col+=sky*vec3(.18,.20,.115);" +
-      "float sun=pow(max(0.,dot(n,normalize(vec3(.13,.18,1.)))),34.);" +
-      "float shimmer=pow(max(0.,h1*.59+h2*.41+.15*w-.44)*2.1,4.);" +
-      "float fold=pow(max(0.,sin(q.x*34.+w*4.+t*.7)*sin(q.y*27.-t*.53+w*2.)),6.);" +
-      "float horizon=.075+.015*sin(p.x*15.+t*.42)+.009*sin(p.x*37.-t*.62);" +
-      "float underside=1.-smoothstep(horizon-.01,horizon+.17,d);" +
-      "col+=surface*(.18*sun+.30*shimmer+.14*fold)*mix(vec3(.34,.77,.96),vec3(1.,.81,.45),.68*sky);" +
-      "col+=underside*(.08+.12*shimmer)*vec3(.31,.64,.75);" +
-      "float ray=0.;" +
-      "for(int i=0;i<40;i++){" +
-      "float k=float(i);float source=.07+.86*hash(k+1.);" +
-      "float slant=(hash(k+19.)-.5)*.18;" +
-      "float x=source+slant*d+.006*sin(t*.23+k*2.1);" +
-      "float wid=.00013+.00062*d+.00017*hash(k+7.);" +
-      "ray+=exp(-(p.x-x)*(p.x-x)/wid)*(.35+.65*hash(k+31.));" +
-      "}" +
-      "col+=ray*.009*exp(-d*2.8)*vec3(.79,.78,.61);" +
-      "float micro=pow(max(0.,h1*.65+h2*.35-.56)*2.,3.)*exp(-d*5.);" +
-      "col+=micro*.045*vec3(.42,.78,.84);" +
-      "gl_FragColor=vec4(clamp(col,0.,1.),1.);" +
-      "}";
+    String fragment="precision highp float;varying vec2 uv;uniform sampler2D tex;uniform float t;\nfloat hash(float x){return fract(sin(x*127.13)*43758.5453);}\nfloat wave(vec2 p){return .18*sin(p.x*1.5+t*.62)+.105*sin(p.y*2.1-p.x*.65-t*.49)+.055*sin(p.x*5.8+p.y*2.4+t*.86);}\nvoid main(){vec2 p=vec2(uv.x,1.-uv.y);float d=p.y;vec3 c=mix(vec3(.014,.29,.36),vec3(.001,.012,.042),pow(d,.83));float sun=exp(-pow((p.x-.51)*2.25,2.))*exp(-d*3.7);c+=sun*vec3(.24,.21,.105);float beams=0.;for(int i=0;i<48;i++){float k=float(i);float x=.08+.84*hash(k+1.)+(hash(k+7.)-.5)*d*.25+sin(t*.16+k)*.005;float w=.000055+d*.00046+hash(k+14.)*.0002;beams+=exp(-pow(p.x-x,2.)/w)*(.4+.6*hash(k+31.));}c+=beams*.025*exp(-d*2.8)*vec3(.79,.76,.55);vec2 q=p*vec2(3.1,2.2);float wv=wave(q*2.);vec2 uv1=fract(q+vec2(t*.029,-t*.021)+wv*.024);vec2 uv2=fract(q*1.71+vec2(-t*.041,t*.036));float h=texture2D(tex,uv1).r*.6+texture2D(tex,uv2).r*.4;float caustic=pow(max(0.,h-.48)*2.8,4.);c+=caustic*exp(-d*3.8)*vec3(.19,.47,.49);gl_FragColor=vec4(clamp(c,0.,1.),1.);}";
     try{backgroundProgram=program(vertex,fragment);}catch(Exception shaderError){Log.e("LivingOcean","Advanced water shader failed, using safe renderer",shaderError);backgroundProgram=program(vertex,safeFragment);}
-    String waterVertex="attribute vec2 a;uniform float t;varying vec3 normal;varying vec2 pos;varying float distanceFade;varying vec3 world;"+
-      "float height(vec2 p){return .11*sin(p.x*9.+p.y*3.+t*.55)+.055*sin(p.x*19.-p.y*7.-t*.77)+.025*sin(p.x*43.+p.y*13.+t*1.12);}"+
-      "void main(){vec2 p=a;float h=height(p);float e=.003;"+
-      "float dx=(height(p+vec2(e,0.))-height(p-vec2(e,0.)))/(2.*e);"+
-      "float dz=(height(p+vec2(0.,e))-height(p-vec2(0.,e)))/(2.*e);"+
-      "normal=normalize(vec3(-dx*.12,-1.,-dz*.12));pos=p;"+
-      "float depth=.22+5.5*p.y*p.y;"+
-      "float perspective=1./(1.+depth*.18);"+
-      "float x=(p.x-.5)*2.7*perspective;"+
-      "float y=.92-1.52*p.y+(.14+.15*p.y)*h;"+
-      "world=vec3(x,y,depth);"+
-      "gl_Position=vec4(x,y,0.,1.);"+
-      "distanceFade=1.-smoothstep(.67,1.,p.y);}";
-    String waterFragment="precision highp float;uniform float t;varying vec3 normal;varying vec2 pos;varying float distanceFade;varying vec3 world;"+
-      "void main(){vec3 n=normalize(normal);vec3 sun=normalize(vec3(.09,-1.,.22));"+
-      "vec3 eye=normalize(vec3(-world.x,-.4,-2.));"+
-      "float spec=pow(max(0.,dot(reflect(-sun,n),eye)),13.);"+
-      "float central=exp(-pow((pos.x-.5)*2.4,2.));"+
-      "float rip=pow(max(0.,sin(pos.x*103.+pos.y*21.+t*.83)*sin(pos.x*37.-pos.y*67.-t*.58)),6.);"+
-      "float fold=pow(max(0.,sin(pos.x*51.+pos.y*37.+t*.44)),12.);"+
-      "float fres=pow(1.-abs(dot(n,eye)),2.);"+
-      "vec3 base=mix(vec3(.006,.12,.18),vec3(.012,.33,.39),pos.y*.65);"+
-      "vec3 gold=vec3(1.,.73,.32);vec3 aqua=vec3(.22,.78,.89);"+
-      "vec3 color=base+(.48*spec+.19*rip+.15*fold+.15*fres)*mix(aqua,gold,central*.9);"+
-      "color+=central*exp(-pos.y*4.)*.11*gold;"+
-      "gl_FragColor=vec4(clamp(color,0.,1.),.98*distanceFade);}";
+    String waterVertex="attribute vec2 a;uniform float t;varying vec3 normal;varying vec2 pos;varying vec3 world;varying float distanceFade;\nfloat wave(vec2 p){return .18*sin(p.x*1.5+t*.62)+.105*sin(p.y*2.1-p.x*.65-t*.49)+.055*sin(p.x*5.8+p.y*2.4+t*.86)+.022*sin(p.x*12.5-p.y*7.2-t*1.17);}\nvoid main(){vec2 p=vec2((a.x-.5)*18.,a.y*19.+.55);float h=wave(p);float e=.018;float dx=(wave(p+vec2(e,0.))-wave(p-vec2(e,0.)))/(2.*e);float dz=(wave(p+vec2(0.,e))-wave(p-vec2(0.,e)))/(2.*e);normal=normalize(vec3(-dx,-1.,-dz));pos=a;world=vec3(p.x,2.25+h,p.y);float inv=1./(1.+p.y*.12);float sx=p.x*.32*inv;float sy=.97-(.31+p.y*.14-h*.48)*inv;gl_Position=vec4(sx,sy,0.,1.);distanceFade=1.-smoothstep(.55,1.,a.y);}";
+    String waterFragment="precision highp float;uniform float t;varying vec3 normal;varying vec2 pos;varying vec3 world;varying float distanceFade;\nvoid main(){vec3 n=normalize(normal);vec3 view=normalize(vec3(-world.x,-2.25,-world.z));vec3 sun=normalize(vec3(.12,-1.,.17));float ndv=max(0.,dot(n,view));float fres=pow(1.-ndv,5.);vec3 halfV=normalize(sun+view);float spec=pow(max(0.,dot(n,halfV)),105.);float sunfield=exp(-pow((pos.x-.52)*2.1,2.));float crease=pow(max(0.,sin(world.x*11.+world.z*8.+t*1.7)*sin(world.x*17.-world.z*6.-t*.9)),10.);float glitter=pow(max(0.,sin(world.x*37.+world.z*23.+t*1.1)),38.);vec3 base=mix(vec3(.008,.095,.15),vec3(.03,.32,.38),clamp(pos.y*.8,0.,1.));vec3 gold=vec3(1.,.72,.30);vec3 aqua=vec3(.27,.83,.96);vec3 c=base+(.78*spec+.22*crease+.26*glitter+.24*fres)*mix(aqua,gold,sunfield*.95);c+=gold*sunfield*.17*exp(-pos.y*3.);gl_FragColor=vec4(clamp(c,0.,1.),.99*distanceFade);}";
     try{surfaceProgram=program(waterVertex,waterFragment);}
     catch(Exception surfaceError){Log.e("LivingOcean","3D mesh shader unavailable; background remains active",surfaceError);surfaceProgram=0;}
     String bubbleVertex="attribute vec4 a;uniform float t;uniform float scale;varying float alpha;varying float seed;varying float depth;"+
