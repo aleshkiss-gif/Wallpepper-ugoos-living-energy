@@ -1,218 +1,132 @@
 package com.ugoos.livingenergy;
 
 import android.service.wallpaper.WallpaperService;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.opengl.GLES20;
-import android.opengl.GLUtils;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.SystemClock;
 import android.util.Log;
 import android.view.SurfaceHolder;
-import java.io.InputStream;
 import java.nio.*;
-import java.util.Random;
 import javax.microedition.khronos.egl.*;
 
 public class EnergyWallpaper extends WallpaperService {
- @Override public Engine onCreateEngine(){return new OceanEngine();}
- class OceanEngine extends Engine {
-  final HandlerThread thread=new HandlerThread("LivingOceanGPU");
+ @Override public Engine onCreateEngine(){return new WaveEngine();}
+ class WaveEngine extends Engine {
+  final HandlerThread thread=new HandlerThread("ParticleWaveGPU");
+  final int COLS=420,ROWS=250,COUNT=COLS*ROWS;
   Handler handler;
   volatile boolean visible=false,ready=false;
   EGL10 egl;EGLDisplay display;EGLContext context;EGLSurface surface;
-  int backgroundProgram,bubbleProgram,surfaceProgram,texture;
-  FloatBuffer quad,points,surfaceMesh;
+  FloatBuffer points;
+  int program;
   long start;
-  final int COUNT=3200;
-  final Runnable frame=new Runnable(){public void run(){if(!visible)return;try{if(ready)draw();}catch(Exception error){Log.e("LivingOcean","GPU frame failed",error);ready=false;}if(visible)handler.postDelayed(this,16);}};
-  OceanEngine(){
+  int width=1920,height=1080;
+  final Runnable frame=new Runnable(){@Override public void run(){
+   if(!visible)return;
+   try{if(ready)draw();}catch(Exception e){Log.e("ParticleWave","Frame failed",e);ready=false;}
+   if(visible)handler.postDelayed(this,16);
+  }};
+  WaveEngine(){
    thread.start();handler=new Handler(thread.getLooper());
-   float[] vertices={-1,-1,1,-1,-1,1,1,1};
-   quad=buffer(vertices);
-   float[] particles=new float[COUNT*4];Random rng=new Random(731);
-   // Depth-weighted field: 76% distant microbubbles, 19% mid-depth, 5% foreground.
-   float[] centers={.07f,.19f,.35f,.52f,.71f,.88f,.96f};
-   for(int i=0;i<COUNT;i++){
-     float layer=rng.nextFloat();
-     float plume=centers[rng.nextInt(centers.length)];
-     float spread=layer<.76f?.16f:layer<.95f?.09f:.045f;
-     float x=rng.nextFloat()<.42f?rng.nextFloat():
-       plume+(float)rng.nextGaussian()*spread;
-     particles[i*4]=Math.max(.005f,Math.min(.995f,x));
-     particles[i*4+1]=rng.nextFloat();
-     // z encodes optical depth: small values are distant, larger values near camera.
-     particles[i*4+2]=layer<.76f?
-       .025f+rng.nextFloat()*.24f:
-       layer<.95f?.30f+rng.nextFloat()*.39f:
-       .73f+rng.nextFloat()*.27f;
-     particles[i*4+3]=rng.nextFloat();
+   float[] data=new float[COUNT*3];int k=0;
+   for(int j=0;j<ROWS;j++)for(int i=0;i<COLS;i++){
+    data[k++]=i/(float)(COLS-1);
+    data[k++]=j/(float)(ROWS-1);
+    data[k++]=(float)((Math.sin(i*17.3+j*13.7)*43758.5453)%1.);
    }
-   points=buffer(particles);
-   // True tessellated 3D wave surface, viewed from below.
-   int cols=96,rows=44;float[] mesh=new float[cols*rows*12];int index=0;
-   for(int j=0;j<rows;j++)for(int i=0;i<cols;i++){
-     float x=i/(float)cols,X=(i+1)/(float)cols;
-     float z=j/(float)rows,Z=(j+1)/(float)rows;
-     float[] cell={x,z,X,z,x,Z,X,z,X,Z,x,Z};
-     for(float v:cell)mesh[index++]=v;
-   }
-   surfaceMesh=buffer(mesh);
+   ByteBuffer bb=ByteBuffer.allocateDirect(data.length*4).order(ByteOrder.nativeOrder());
+   points=bb.asFloatBuffer();points.put(data);points.position(0);
   }
-  FloatBuffer buffer(float[] a){ByteBuffer b=ByteBuffer.allocateDirect(a.length*4).order(ByteOrder.nativeOrder());FloatBuffer f=b.asFloatBuffer();f.put(a);f.position(0);return f;}
   @Override public void onSurfaceCreated(SurfaceHolder h){super.onSurfaceCreated(h);handler.post(()->{releaseGL();initGL();});}
-  @Override public void onSurfaceChanged(SurfaceHolder h,int format,int w,int ht){super.onSurfaceChanged(h,format,w,ht);handler.post(()->{if(ready)GLES20.glViewport(0,0,w,ht);});}
+  @Override public void onSurfaceChanged(SurfaceHolder h,int format,int w,int ht){super.onSurfaceChanged(h,format,w,ht);width=Math.max(1,w);height=Math.max(1,ht);handler.post(()->{if(ready)GLES20.glViewport(0,0,width,height);});}
   @Override public void onVisibilityChanged(boolean v){visible=v;handler.removeCallbacks(frame);if(v)handler.post(frame);}
   @Override public void onSurfaceDestroyed(SurfaceHolder h){visible=false;handler.removeCallbacks(frame);handler.post(this::releaseGL);super.onSurfaceDestroyed(h);}
   @Override public void onDestroy(){visible=false;handler.removeCallbacks(frame);handler.post(()->{releaseGL();thread.quitSafely();});super.onDestroy();}
   int shader(int type,String source){
-   int s=GLES20.glCreateShader(type);GLES20.glShaderSource(s,source);GLES20.glCompileShader(s);
-   int[] ok=new int[1];GLES20.glGetShaderiv(s,GLES20.GL_COMPILE_STATUS,ok,0);
-   if(ok[0]==0)throw new RuntimeException(GLES20.glGetShaderInfoLog(s));
-   return s;
-  }
-  int program(String vertex,String fragment){
-   int p=GLES20.glCreateProgram();int v=shader(GLES20.GL_VERTEX_SHADER,vertex),f=shader(GLES20.GL_FRAGMENT_SHADER,fragment);
-   GLES20.glAttachShader(p,v);GLES20.glAttachShader(p,f);GLES20.glLinkProgram(p);
-   int[] ok=new int[1];GLES20.glGetProgramiv(p,GLES20.GL_LINK_STATUS,ok,0);
-   if(ok[0]==0)throw new RuntimeException(GLES20.glGetProgramInfoLog(p));
-   GLES20.glDeleteShader(v);GLES20.glDeleteShader(f);return p;
+   int id=GLES20.glCreateShader(type);GLES20.glShaderSource(id,source);GLES20.glCompileShader(id);
+   int[] ok=new int[1];GLES20.glGetShaderiv(id,GLES20.GL_COMPILE_STATUS,ok,0);
+   if(ok[0]==0)throw new RuntimeException("GLSL: "+GLES20.glGetShaderInfoLog(id));
+   return id;
   }
   void initGL(){
    try{
     egl=(EGL10)EGLContext.getEGL();display=egl.eglGetDisplay(EGL10.EGL_DEFAULT_DISPLAY);
-    egl.eglInitialize(display,new int[2]);
-    EGLConfig[] configs=new EGLConfig[1];int[] count=new int[1];
-    int[] configAttrs={0x3040,4,EGL10.EGL_RED_SIZE,8,EGL10.EGL_GREEN_SIZE,8,EGL10.EGL_BLUE_SIZE,8,EGL10.EGL_NONE};
-    egl.eglChooseConfig(display,configAttrs,configs,1,count);
+    if(!egl.eglInitialize(display,new int[2]))throw new RuntimeException("EGL init");
+    EGLConfig[] cfg=new EGLConfig[1];int[] count=new int[1];
+    egl.eglChooseConfig(display,new int[]{0x3040,4,EGL10.EGL_RED_SIZE,8,EGL10.EGL_GREEN_SIZE,8,EGL10.EGL_BLUE_SIZE,8,EGL10.EGL_NONE},cfg,1,count);
     if(count[0]<1)throw new RuntimeException("No GLES2 config");
-    context=egl.eglCreateContext(display,configs[0],EGL10.EGL_NO_CONTEXT,new int[]{0x3098,2,EGL10.EGL_NONE});
-    surface=egl.eglCreateWindowSurface(display,configs[0],getSurfaceHolder(),null);
-    if(!egl.eglMakeCurrent(display,surface,surface,context))throw new RuntimeException("EGL makeCurrent failed");
-    String vertex="attribute vec2 a; varying vec2 uv; void main(){uv=(a+1.0)*0.5;gl_Position=vec4(a,0.,1.);}";
-    String safeFragment="precision highp float;varying vec2 uv;uniform sampler2D tex;uniform float t;" +
-      "float wave(vec2 p){return .42*sin(p.x*12.+p.y*7.+t*.61)+.26*sin(p.x*27.-p.y*13.-t*.79)+.17*sin(p.x*51.+p.y*23.+t*.44);}" +
-      "void main(){" +
-      "vec2 p=vec2(uv.x,1.-uv.y);float d=p.y;" +
-      "vec3 col=mix(vec3(.012,.27,.43),vec3(.001,.012,.052),pow(d,.75));" +
-      "float near=1.-smoothstep(.025,.33,d);" +
-      "vec2 q=vec2(p.x*1.65,p.y*1.45);float w=wave(q);" +
-      "vec2 uv1=fract(q+vec2(t*.047,t*.018)+vec2(w*.026));" +
-      "vec2 uv2=fract(q*1.93+vec2(-t*.034,t*.039));" +
-      "float h1=texture2D(tex,uv1).r;float h2=texture2D(tex,uv2).r;" +
-      "float h=h1*.58+h2*.42;" +
-      "float e=.003;" +
-      "float dx=texture2D(tex,fract(uv1+vec2(e,0.))).r-texture2D(tex,fract(uv1-vec2(e,0.))).r;" +
-      "float dy=texture2D(tex,fract(uv1+vec2(0.,e))).r-texture2D(tex,fract(uv1-vec2(0.,e))).r;" +
-      "vec3 n=normalize(vec3(-dx*24.-cos(q.x*12.+t*.61)*.24,-dy*24.,1.));" +
-      "float spec=pow(max(0.,dot(n,normalize(vec3(.18,.30,1.)))),28.);" +
-      "float caustic=pow(max(0.,h+.13*w-.46)*2.1,3.);" +
-      "col+=near*(.16*spec+.23*caustic)*vec3(.43,.84,.97);" +
-      "float sky=(.78+.22*cos((p.x-.5)*3.0+sin(t*.09)*.12))*exp(-d*3.8);" +
-      "col+=sky*vec3(.12,.19,.20);" +
-      "float beams=0.;" +
-      "for(int i=0;i<15;i++){" +
-      "float k=float(i);float origin=(k+.5)/15.;" +
-      "float slope=.13*sin(k*2.39)+.035*cos(k*4.17);" +
-      "float wobble=sin(t*.21+k*1.7)*.012+sin(t*.12+k*.7)*.008;" +
-      "float pos=origin+slope*d+wobble+sin(d*4.+t*.18+k)*.007;" +
-      "float diff=p.x-pos;" +
-      "float width=.0025+d*.0035+.0008*mod(k,3.);" +
-      "float beam=exp(-diff*diff/width);" +
-      "beams+=beam*(.57+.28*sin(t*.31+k*1.3))*(1.-smoothstep(.15,.95,d));" +
-      "}" +
-      "col+=beams*.064*vec3(.49,.83,.99);" +
-      "float gold=(.65+.35*cos((p.x-.45)*2.4))*exp(-d*7.);" +
-      "col+=gold*.025*vec3(1.,.78,.41);" +
-      "gl_FragColor=vec4(clamp(col,0.,1.),1.);" +
+    context=egl.eglCreateContext(display,cfg[0],EGL10.EGL_NO_CONTEXT,new int[]{0x3098,2,EGL10.EGL_NONE});
+    surface=egl.eglCreateWindowSurface(display,cfg[0],getSurfaceHolder(),null);
+    if(!egl.eglMakeCurrent(display,surface,surface,context))throw new RuntimeException("eglMakeCurrent");
+    String vs="precision highp float;attribute vec3 a;uniform float t;uniform float pixelScale;varying vec3 color;varying float opacity;"+
+      "float wave(vec2 p){"+
+      "float far=1.-smoothstep(.12,.83,p.y);"+
+      "return (.10+.06*far)*sin(p.x*10.5+t*.42+p.y*4.)"+
+      "+(.065+.015*far)*sin(p.x*18.5-p.y*7.-t*.59)"+
+      "+.027*sin(p.x*39.+p.y*13.+t*.88);"+
+      "}"+
+      "void main(){"+
+      "vec2 p=a.xy;float depth=p.y;"+
+      "float h=wave(p);"+
+      "float x=(p.x-.5)*2.55*(.98-.16*depth);"+
+      "float y=-.91+depth*1.00+h*(.95-.43*depth);"+
+      "gl_Position=vec4(x,y,0.,1.);"+
+      "float foreground=1.-depth;"+
+      "gl_PointSize=clamp((1.25+3.25*foreground)*pixelScale,1.,8.);"+
+      "float streak=pow(max(0.,sin(p.x*24.+depth*17.+t*.22)),14.);"+
+      "float cyan=.5+.5*sin(p.x*11.+depth*7.+t*.24);"+
+      "float violet=.5+.5*sin(p.x*8.-depth*14.-t*.17+2.);"+
+      "float warm=pow(max(0.,sin(p.x*19.+depth*23.-t*.31)),32.)*.34;"+
+      "vec3 blue=vec3(.015,.25,.99),aqua=vec3(.02,.90,1.),purple=vec3(.44,.09,.98),pink=vec3(1.,.14,.72);"+
+      "color=mix(blue,aqua,cyan);color=mix(color,purple,violet*.62);"+
+      "color=mix(color,pink,streak*.55);"+
+      "color=mix(color,vec3(1.,.72,.34),warm);"+
+      "color*=.68+.43*streak+.20*sin(t*.7+p.x*31.+depth*19.);"+
+      "opacity=(.52+.43*foreground)*(.7+.3*fract(abs(a.z)*1.73));"+
       "}";
-    String fragment="precision highp float;varying vec2 uv;uniform sampler2D tex;uniform float t;\nfloat hash(float x){return fract(sin(x*127.13)*43758.5453);}\nfloat wave(vec2 p){return .18*sin(p.x*1.5+t*.62)+.105*sin(p.y*2.1-p.x*.65-t*.49)+.055*sin(p.x*5.8+p.y*2.4+t*.86);}\nvoid main(){vec2 p=vec2(uv.x,1.-uv.y);float d=p.y;vec3 c=mix(vec3(.014,.29,.36),vec3(.001,.012,.042),pow(d,.83));float sun=exp(-pow((p.x-.51)*2.25,2.))*exp(-d*3.7);c+=sun*vec3(.24,.21,.105);float beams=0.;for(int i=0;i<48;i++){float k=float(i);float x=.08+.84*hash(k+1.)+(hash(k+7.)-.5)*d*.25+sin(t*.16+k)*.005;float w=.000055+d*.00046+hash(k+14.)*.0002;beams+=exp(-pow(p.x-x,2.)/w)*(.4+.6*hash(k+31.));}c+=beams*.025*exp(-d*2.8)*vec3(.79,.76,.55);vec2 q=p*vec2(3.1,2.2);float wv=wave(q*2.);vec2 uv1=fract(q+vec2(t*.029,-t*.021)+wv*.024);vec2 uv2=fract(q*1.71+vec2(-t*.041,t*.036));float h=texture2D(tex,uv1).r*.6+texture2D(tex,uv2).r*.4;float caustic=pow(max(0.,h-.48)*2.8,4.);c+=caustic*exp(-d*3.8)*vec3(.19,.47,.49);gl_FragColor=vec4(clamp(c,0.,1.),1.);}";
-    try{backgroundProgram=program(vertex,fragment);}catch(Exception shaderError){Log.e("LivingOcean","Advanced water shader failed, using safe renderer",shaderError);backgroundProgram=program(vertex,safeFragment);}
-    String waterVertex="precision highp float;attribute vec2 a;uniform float t;varying vec3 normal;varying vec2 pos;varying vec3 world;varying float distanceFade;\nvoid main(){\nvec2 p=vec2((a.x-.5)*24.,a.y*24.+.35);vec2 original=p;\nvec2 d1=normalize(vec2(.94,.34));vec2 d2=normalize(vec2(-.48,.88));vec2 d3=normalize(vec2(.71,-.70));vec2 d4=normalize(vec2(.24,.97));\nfloat ph1=dot(d1,p)*1.23+t*.73;float ph2=dot(d2,p)*1.86-t*.94;float ph3=dot(d3,p)*3.8+t*1.31;float ph4=dot(d4,p)*7.7-t*1.76;\nfloat h=.23*sin(ph1)+.13*sin(ph2)+.058*sin(ph3)+.021*sin(ph4);\nvec2 shift=.13*d1*cos(ph1)+.075*d2*cos(ph2)+.022*d3*cos(ph3);\np+=shift;\nvec2 g=.23*1.23*d1*cos(ph1)+.13*1.86*d2*cos(ph2)+.058*3.8*d3*cos(ph3)+.021*7.7*d4*cos(ph4);\nnormal=normalize(vec3(g.x,-1.,g.y));pos=a;world=vec3(p.x,2.15+h,p.y);\nfloat inv=1./(1.+p.y*.095);\nfloat sx=p.x*.25*inv;\nfloat sy=.96-(.20+p.y*.18-h*.56)*inv;\ngl_Position=vec4(sx,sy,0.,1.);\ndistanceFade=1.-smoothstep(.72,1.,a.y);\n}";
-    String waterFragment="precision highp float;uniform float t;varying vec3 normal;varying vec2 pos;varying vec3 world;varying float distanceFade;\nvoid main(){\nvec3 n=normalize(normal);\nvec3 v=normalize(vec3(-world.x,-2.15,-world.z));\nvec3 l=normalize(vec3(.16,-1.,.24));\nfloat facing=max(0.,dot(n,v));\nfloat fres=.025+.975*pow(1.-facing,5.);\nfloat glint=pow(max(0.,dot(reflect(-l,n),v)),72.);\nfloat goldArea=exp(-pow((pos.x-.53)*2.3,2.));\nfloat caustic=pow(max(0.,sin(world.x*12.+world.z*7.+t*.82)*sin(world.x*7.-world.z*14.-t*.68)),12.);\nfloat fine=pow(max(0.,sin(world.x*31.+world.z*21.-t*1.4)),30.);\nvec3 deep=vec3(.005,.075,.13);vec3 teal=vec3(.025,.35,.42);\nvec3 base=mix(deep,teal,clamp(pos.y*.65,0.,1.));\nvec3 sunlight=mix(vec3(.28,.83,.95),vec3(1.,.77,.37),goldArea);\nvec3 color=base+sunlight*(.95*glint+.19*caustic+.15*fine+.23*fres);\ncolor+=vec3(1.,.71,.28)*goldArea*.12*exp(-pos.y*4.);\ngl_FragColor=vec4(clamp(color,0.,1.),.99*distanceFade);\n}";
-    try{surfaceProgram=program(waterVertex,waterFragment);}
-    catch(Exception surfaceError){Log.e("LivingOcean","3D mesh shader unavailable; background remains active",surfaceError);surfaceProgram=0;}
-    String bubbleVertex="attribute vec4 a;uniform float t;uniform float scale;varying float alpha;varying float seed;varying float depth;"+
-      "void main(){float velocity=.018+a.z*.11+a.w*.025;float y=fract(a.y+t*velocity);"+
-      "float drift=(.003+a.z*.014)*sin(t*(.3+a.w*.6)+a.y*9.)+(.002+a.z*.008)*sin(t*.19+a.w*24.);"+
-      "float x=a.x+drift;gl_Position=vec4(x*2.-1.,y*2.-1.,0.,1.);"+
-      "float r=mix(1.25,24.,pow(a.z,2.65));gl_PointSize=max(1.,r*scale);"+
-      "alpha=mix(.11,.71,pow(a.z,.85));seed=a.w;depth=a.z;}";
-    String bubbleFrag="precision mediump float;varying float alpha;varying float seed;varying float depth;"+
-      "void main(){vec2 q=gl_PointCoord-.5;"+
-      "q.x*=1.+.10*sin(seed*31.);q.y*=1.+.13*cos(seed*43.);"+
-      "float r=length(q)*2.;float irregular=.025*sin(atan(q.y,q.x)*5.+seed*19.);"+
-      "float edge=1.-smoothstep(.76+irregular,.97+irregular,r);"+
-      "float shell=smoothstep(.66,.87,r)*(1.-smoothstep(.91,1.,r));"+
-      "float glint=exp(-length((q-vec2(-.20,-.23))*9.)*length((q-vec2(-.20,-.23))*9.));"+
-      "float secondary=exp(-length((q-vec2(.25,.18))*15.)*length((q-vec2(.25,.18))*15.));"+
-      "float far=1.-smoothstep(.12,.38,depth);"+
-      "float haze=(1.-smoothstep(.15,.98,r))*.20*far;"+
-      "float opacity=(shell*.64+glint*.72+secondary*.22+(.07+.12*depth)*edge+haze)*alpha;"+
-      "gl_FragColor=vec4(mix(vec3(.45,.73,.85),vec3(.89,.97,1.),glint*.8+depth*.15),opacity*edge);}";
-    bubbleProgram=program(bubbleVertex,bubbleFrag);
-    int[] ids=new int[1];GLES20.glGenTextures(1,ids,0);texture=ids[0];
-    GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,texture);
-    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_MIN_FILTER,GLES20.GL_LINEAR);
-    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_MAG_FILTER,GLES20.GL_LINEAR);
-    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_WRAP_S,GLES20.GL_CLAMP_TO_EDGE);
-    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_WRAP_T,GLES20.GL_CLAMP_TO_EDGE);
-    // Deterministic seamless multi-frequency water-height texture.
-    final int n=256;
-    Bitmap water=Bitmap.createBitmap(n,n,Bitmap.Config.ARGB_8888);
-    int[] pixels=new int[n*n];
-    for(int y=0;y<n;y++)for(int x=0;x<n;x++){
-      double u=x*2*Math.PI/n,v=y*2*Math.PI/n;
-      double wave=.5+.17*Math.sin(3*u+2*Math.sin(2*v))
-        +.12*Math.sin(5*v-2*u)+.08*Math.sin(11*u+7*v)
-        +.06*Math.cos(17*v-9*u)+.04*Math.sin(23*u+19*v);
-      int z=Math.max(0,Math.min(255,(int)(wave*255)));
-      pixels[y*n+x]=android.graphics.Color.rgb(z,z,z);
-    }
-    water.setPixels(pixels,0,n,0,0,n,n);
-    GLUtils.texImage2D(GLES20.GL_TEXTURE_2D,0,water,0);
-    water.recycle();
-    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_WRAP_S,GLES20.GL_REPEAT);
-    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_WRAP_T,GLES20.GL_REPEAT);
+    String fs="precision mediump float;varying vec3 color;varying float opacity;"+
+      "void main(){vec2 q=gl_PointCoord-.5;float r=length(q)*2.;"+
+      "float core=1.-smoothstep(.12,.70,r);"+
+      "float halo=(1.-smoothstep(.3,1.,r))*.30;"+
+      "gl_FragColor=vec4(color*(.75+.60*core),opacity*(core+halo));}";
+    int v=shader(GLES20.GL_VERTEX_SHADER,vs),fr=shader(GLES20.GL_FRAGMENT_SHADER,fs);
+    program=GLES20.glCreateProgram();GLES20.glAttachShader(program,v);GLES20.glAttachShader(program,fr);GLES20.glLinkProgram(program);
+    int[] ok=new int[1];GLES20.glGetProgramiv(program,GLES20.GL_LINK_STATUS,ok,0);
+    if(ok[0]==0)throw new RuntimeException("Link: "+GLES20.glGetProgramInfoLog(program));
+    GLES20.glDeleteShader(v);GLES20.glDeleteShader(fr);
     android.graphics.Rect bounds=getSurfaceHolder().getSurfaceFrame();
-    GLES20.glViewport(0,0,Math.max(1,bounds.width()),Math.max(1,bounds.height()));
+    width=Math.max(1,bounds.width());height=Math.max(1,bounds.height());
+    GLES20.glViewport(0,0,width,height);
     start=SystemClock.uptimeMillis();ready=true;
-   }catch(Exception error){Log.e("LivingOcean","GPU initialization failed",error);ready=false;releaseGL();}
+    Log.i("ParticleWave","GPU particle wave initialized, particles="+COUNT);
+   }catch(Exception e){Log.e("ParticleWave","Init failed",e);ready=false;releaseGL();}
   }
   void draw(){
-   if(!ready)return;
-   int[] viewport=new int[4];GLES20.glGetIntegerv(GLES20.GL_VIEWPORT,viewport,0);
-   if(viewport[2]==0||viewport[3]==0){android.graphics.Rect r=getSurfaceHolder().getSurfaceFrame();GLES20.glViewport(0,0,r.width(),r.height());}
    float t=(SystemClock.uptimeMillis()-start)/1000f;
-   GLES20.glClearColor(.002f,.009f,.025f,1f);
-   GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+   GLES20.glViewport(0,0,width,height);
+   GLES20.glClearColor(.001f,.002f,.014f,1f);GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
    GLES20.glEnable(GLES20.GL_BLEND);
-   GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA,GLES20.GL_ONE_MINUS_SRC_ALPHA);
-   if(surfaceProgram!=0){
-     GLES20.glUseProgram(surfaceProgram);
-     int meshLoc=GLES20.glGetAttribLocation(surfaceProgram,"a");
-     if(meshLoc>=0){
-       surfaceMesh.position(0);GLES20.glEnableVertexAttribArray(meshLoc);
-       GLES20.glVertexAttribPointer(meshLoc,2,GLES20.GL_FLOAT,false,0,surfaceMesh);
-       GLES20.glUniform1f(GLES20.glGetUniformLocation(surfaceProgram,"t"),t);
-       GLES20.glDrawArrays(GLES20.GL_TRIANGLES,0,surfaceMesh.capacity()/2);
-       GLES20.glDisableVertexAttribArray(meshLoc);
-     }
-   }
-   GLES20.glDisable(GLES20.GL_BLEND);
-   if(!egl.eglSwapBuffers(display,surface)){Log.e("LivingOcean","EGL swap failed: "+egl.eglGetError());ready=false;}
+   GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA,GLES20.GL_ONE);
+   GLES20.glUseProgram(program);
+   int a=GLES20.glGetAttribLocation(program,"a");
+   points.position(0);GLES20.glEnableVertexAttribArray(a);
+   GLES20.glVertexAttribPointer(a,3,GLES20.GL_FLOAT,false,0,points);
+   GLES20.glUniform1f(GLES20.glGetUniformLocation(program,"t"),t);
+   GLES20.glUniform1f(GLES20.glGetUniformLocation(program,"pixelScale"),Math.max(.7f,width/1920f));
+   GLES20.glDrawArrays(GLES20.GL_POINTS,0,COUNT);
+   GLES20.glDisableVertexAttribArray(a);GLES20.glDisable(GLES20.GL_BLEND);
+   if(!egl.eglSwapBuffers(display,surface)){Log.e("ParticleWave","Swap failed "+egl.eglGetError());ready=false;}
   }
   void releaseGL(){
-   ready=false;
-   if(egl==null)return;
+   ready=false;if(egl==null)return;
    if(display!=null&&display!=EGL10.EGL_NO_DISPLAY){
     egl.eglMakeCurrent(display,EGL10.EGL_NO_SURFACE,EGL10.EGL_NO_SURFACE,EGL10.EGL_NO_CONTEXT);
     if(surface!=null&&surface!=EGL10.EGL_NO_SURFACE)egl.eglDestroySurface(display,surface);
     if(context!=null&&context!=EGL10.EGL_NO_CONTEXT)egl.eglDestroyContext(display,context);
     egl.eglTerminate(display);
    }
-   surface=null;context=null;display=null;egl=null;
+   egl=null;display=null;context=null;surface=null;
   }
  }
 }
