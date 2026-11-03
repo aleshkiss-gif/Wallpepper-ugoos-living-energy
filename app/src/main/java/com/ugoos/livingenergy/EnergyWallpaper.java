@@ -28,7 +28,7 @@ public class EnergyWallpaper extends WallpaperService {
    try{
     c=getSurfaceHolder().lockCanvas();if(c==null)return;
     int w=c.getWidth(),h=c.getHeight();
-    c.drawColor(Color.rgb(1,9,27));
+    c.drawColor(Color.rgb(2,19,53));
     p.setStyle(Paint.Style.FILL);
     // Layered translucent silk ribbons with moving highlights and depth.
     final int layers=9;
@@ -45,7 +45,7 @@ public class EnergyWallpaper extends WallpaperService {
         if(x==0){ribbon.moveTo(x,y);crest.moveTo(x,y);}
         else{ribbon.lineTo(x,y);crest.lineTo(x,y);}
       }
-      float thickness=h*(.10f+layer*.003f);
+      float thickness=h*(.155f+layer*.004f);
       for(int x=w+step;x>=0;x-=step){
         float u=x/(float)w;
         float y=baseline+(float)Math.sin(u*7+t*(.4f+layer*.055f)+layer*.7f)*amplitude
@@ -53,19 +53,19 @@ public class EnergyWallpaper extends WallpaperService {
         ribbon.lineTo(x,y+thickness);
       }
       ribbon.close();
-      int a=(int)(light*(layer%2==0?125:105));
+      int a=Math.min(255,(int)((layer%2==0?225:195)*(.55f+light*.65f)));
       p.setStyle(Paint.Style.FILL);
       p.setShader(new LinearGradient(0,baseline-h*.07f,0,baseline+thickness,
-        new int[]{Color.argb(a,0,170,255),Color.argb((int)(light*78),0,65,190),
-          Color.argb(12,0,15,75),Color.TRANSPARENT},
+        new int[]{Color.argb(a,10,195,255),Color.argb((int)(165*(.5f+light*.5f)),0,92,225),
+          Color.argb(105,0,43,145),Color.argb(30,0,22,90)},
         new float[]{0f,.25f,.72f,1f},Shader.TileMode.CLAMP));
       c.drawPath(ribbon,p);p.setShader(null);
       p.setStyle(Paint.Style.STROKE);
       p.setStrokeWidth(Math.max(1.5f,w/1600f));
-      p.setColor(Color.argb((int)(165*light),35,190,255));
+      p.setColor(Color.argb(Math.min(255,(int)(245*(.5f+light*.6f))),45,215,255));
       c.drawPath(crest,p);
-      p.setStrokeWidth(Math.max(2f,w/480f));
-      p.setColor(Color.argb((int)(28*light),0,130,255));
+      p.setStrokeWidth(Math.max(4f,w/300f));
+      p.setColor(Color.argb((int)(105*(.5f+light*.5f)),0,160,255));
       c.drawPath(crest,p);
       p.setStyle(Paint.Style.FILL);
     }
@@ -74,7 +74,7 @@ public class EnergyWallpaper extends WallpaperService {
      float x=((xs[i]+t*(.007f+i%7*.002f))%1f)*w;
      float y=(ys[i]+(float)Math.sin(t+ph[i])*.025f)*h;
      float glow=(float)(.5+.5*Math.sin(t*2+ph[i]));
-     p.setColor(Color.argb(Math.min(255,(int)((30+190*glow)*light)),30,185,255));
+     p.setColor(Color.argb(Math.min(255,(int)((75+175*glow)*(.5f+light*.6f))),35,195,255));
      c.drawCircle(x,y,Math.max(.7f,w/2300f)*(1+glow*1.7f),p);
     }
    }catch(Exception ignored){}finally{if(c!=null)try{getSurfaceHolder().unlockCanvasAndPost(c);}catch(Exception ignored){}}
