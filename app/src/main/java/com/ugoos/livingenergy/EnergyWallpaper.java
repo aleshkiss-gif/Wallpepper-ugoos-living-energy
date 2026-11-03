@@ -22,8 +22,8 @@ public class EnergyWallpaper extends WallpaperService {
   Handler handler;
   volatile boolean visible=false,ready=false;
   EGL10 egl;EGLDisplay display;EGLContext context;EGLSurface surface;
-  int backgroundProgram,bubbleProgram,texture;
-  FloatBuffer quad,points;
+  int backgroundProgram,bubbleProgram,surfaceProgram,texture;
+  FloatBuffer quad,points,surfaceMesh;
   long start;
   final int COUNT=3200;
   final Runnable frame=new Runnable(){public void run(){if(!visible)return;try{if(ready)draw();}catch(Exception error){Log.e("LivingOcean","GPU frame failed",error);ready=false;}if(visible)handler.postDelayed(this,16);}};
@@ -50,6 +50,15 @@ public class EnergyWallpaper extends WallpaperService {
      particles[i*4+3]=rng.nextFloat();
    }
    points=buffer(particles);
+   // True tessellated 3D wave surface, viewed from below.
+   int cols=96,rows=44;float[] mesh=new float[cols*rows*12];int index=0;
+   for(int j=0;j<rows;j++)for(int i=0;i<cols;i++){
+     float x=i/(float)cols,X=(i+1)/(float)cols;
+     float z=j/(float)rows,Z=(j+1)/(float)rows;
+     float[] cell={x,z,X,z,x,Z,X,z,X,Z,x,Z};
+     for(float v:cell)mesh[index++]=v;
+   }
+   surfaceMesh=buffer(mesh);
   }
   FloatBuffer buffer(float[] a){ByteBuffer b=ByteBuffer.allocateDirect(a.length*4).order(ByteOrder.nativeOrder());FloatBuffer f=b.asFloatBuffer();f.put(a);f.position(0);return f;}
   @Override public void onSurfaceCreated(SurfaceHolder h){super.onSurfaceCreated(h);handler.post(()->{releaseGL();initGL();});}
@@ -155,6 +164,26 @@ public class EnergyWallpaper extends WallpaperService {
       "gl_FragColor=vec4(clamp(col,0.,1.),1.);" +
       "}";
     try{backgroundProgram=program(vertex,fragment);}catch(Exception shaderError){Log.e("LivingOcean","Advanced water shader failed, using safe renderer",shaderError);backgroundProgram=program(vertex,safeFragment);}
+    String waterVertex="attribute vec2 a;uniform float t;varying vec3 normal;varying vec2 pos;varying float distanceFade;"+
+      "float height(vec2 p){return .075*sin(p.x*15.+p.y*5.+t*.48)+.039*sin(p.x*31.-p.y*12.-t*.71)+.018*sin(p.x*59.+p.y*17.+t*.93);}"+
+      "void main(){vec2 p=a;float h=height(p);float e=.002;"+
+      "float dx=(height(p+vec2(e,0.))-height(p-vec2(e,0.)))/(2.*e);"+
+      "float dz=(height(p+vec2(0.,e))-height(p-vec2(0.,e)))/(2.*e);"+
+      "normal=normalize(vec3(-dx*.18,1.,-dz*.18));pos=p;"+
+      "float y=.98-.58*pow(p.y,1.7)+h*(.17-.10*p.y);"+
+      "gl_Position=vec4(p.x*2.-1.,y*2.-1.,0.,1.);"+
+      "distanceFade=1.-smoothstep(.62,1.,p.y);}";
+    String waterFragment="precision mediump float;uniform float t;varying vec3 normal;varying vec2 pos;varying float distanceFade;"+
+      "void main(){vec3 n=normalize(normal);vec3 sun=normalize(vec3(.13,1.,.22));"+
+      "float spec=pow(max(0.,dot(reflect(-sun,n),normalize(vec3(0.,1.,.35)))),30.);"+
+      "float gold=exp(-pow((pos.x-.52)*2.3,2.));"+
+      "float rip=pow(max(0.,sin(pos.x*86.+pos.y*27.+t*.7)*sin(pos.x*43.-pos.y*49.-t*.48)),8.);"+
+      "float fres=pow(1.-abs(n.y),2.);"+
+      "vec3 base=mix(vec3(.005,.075,.12),vec3(.016,.29,.36),pos.y*.75);"+
+      "vec3 color=base+(.30*spec+.12*rip+.11*fres)*mix(vec3(.29,.78,.92),vec3(1.,.76,.35),gold);"+
+      "gl_FragColor=vec4(color,.96*distanceFade);}";
+    try{surfaceProgram=program(waterVertex,waterFragment);}
+    catch(Exception surfaceError){Log.e("LivingOcean","3D mesh shader unavailable; background remains active",surfaceError);surfaceProgram=0;}
     String bubbleVertex="attribute vec4 a;uniform float t;uniform float scale;varying float alpha;varying float seed;varying float depth;"+
       "void main(){float velocity=.018+a.z*.11+a.w*.025;float y=fract(a.y+t*velocity);"+
       "float drift=(.003+a.z*.014)*sin(t*(.3+a.w*.6)+a.y*9.)+(.002+a.z*.008)*sin(t*.19+a.w*24.);"+
@@ -215,6 +244,17 @@ public class EnergyWallpaper extends WallpaperService {
 
    GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP,0,4);GLES20.glDisableVertexAttribArray(loc);
    GLES20.glEnable(GLES20.GL_BLEND);GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA,GLES20.GL_ONE_MINUS_SRC_ALPHA);
+   if(surfaceProgram!=0){
+     GLES20.glUseProgram(surfaceProgram);
+     int meshLoc=GLES20.glGetAttribLocation(surfaceProgram,"a");
+     if(meshLoc>=0){
+       surfaceMesh.position(0);GLES20.glEnableVertexAttribArray(meshLoc);
+       GLES20.glVertexAttribPointer(meshLoc,2,GLES20.GL_FLOAT,false,0,surfaceMesh);
+       GLES20.glUniform1f(GLES20.glGetUniformLocation(surfaceProgram,"t"),t);
+       GLES20.glDrawArrays(GLES20.GL_TRIANGLES,0,surfaceMesh.capacity()/2);
+       GLES20.glDisableVertexAttribArray(meshLoc);
+     }
+   }
    GLES20.glUseProgram(bubbleProgram);
    loc=GLES20.glGetAttribLocation(bubbleProgram,"a");
    points.position(0);GLES20.glEnableVertexAttribArray(loc);GLES20.glVertexAttribPointer(loc,4,GLES20.GL_FLOAT,false,0,points);
