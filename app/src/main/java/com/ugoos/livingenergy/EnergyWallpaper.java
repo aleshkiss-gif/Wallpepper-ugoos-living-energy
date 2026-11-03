@@ -14,7 +14,7 @@ public class EnergyWallpaper extends WallpaperService {
  @Override public Engine onCreateEngine(){return new WaveEngine();}
  class WaveEngine extends Engine {
   final HandlerThread thread=new HandlerThread("ParticleWaveGPU");
-  final int COLS=300,ROWS=155,COUNT=COLS*ROWS;
+  final int COLS=190,ROWS=110,COUNT=COLS*ROWS;
   Handler handler;
   volatile boolean visible=false,ready=false;
   EGL10 egl;EGLDisplay display;EGLContext context;EGLSurface surface;
@@ -69,26 +69,26 @@ public class EnergyWallpaper extends WallpaperService {
       "void main(){"+
       "vec2 p=a.xy;float depth=p.y;"+
       "float h=wave(p);"+
-      "float x=(p.x-.5)*2.55*(.98-.16*depth);"+
-      "float y=-.92+depth*.92+h*(.90-.48*depth);"+
+      "float x=(p.x-.5)*2.08*(1.0-.08*depth);"+
+      "float y=-1.06+depth*1.24+h*(.75-.35*depth);"+
       "gl_Position=vec4(x,y,0.,1.);"+
       "float foreground=1.-depth;"+
-      "gl_PointSize=clamp((2.8+5.2*foreground)*pixelScale,2.,12.);"+
+      "gl_PointSize=clamp((3.2+6.2*foreground)*pixelScale,3.,14.);"+
       "float streak=pow(max(0.,sin(p.x*17.+depth*13.+t*.22)),22.);"+
-      "float cyan=.5+.5*sin(p.x*11.+depth*7.+t*.24);"+
-      "float violet=.5+.5*sin(p.x*8.-depth*14.-t*.17+2.);"+
-      "float warm=pow(max(0.,sin(p.x*19.+depth*23.-t*.31)),32.)*.34;"+
+      "float cyan=.5+.5*sin(p.x*7.+depth*5.+t*.24);"+
+      "float violet=.5+.5*sin(p.x*5.-depth*8.-t*.17+2.);"+
+      "float warm=pow(max(0.,sin(p.x*13.+depth*11.-t*.31)),24.)*.24;"+
       "vec3 blue=vec3(.015,.25,.99),aqua=vec3(.02,.90,1.),purple=vec3(.44,.09,.98),pink=vec3(1.,.14,.72);"+
-      "color=mix(blue,aqua,cyan);color=mix(color,purple,violet*.62);"+
-      "color=mix(color,pink,streak*.55);"+
+      "color=mix(blue,aqua,cyan*.8);color=mix(color,purple,violet*.75);"+
+      "color=mix(color,pink,streak*.82);"+
       "color=mix(color,vec3(1.,.72,.34),warm);"+
-      "color*=.86+.72*streak+.13*sin(t*.7+p.x*31.+depth*19.);"+
-      "opacity=(.70+.27*foreground)*(.78+.22*fract(abs(a.z)*1.73));"+
+      "color*=1.15+.65*streak+.08*sin(t*.7+p.x*31.+depth*19.);"+
+      "opacity=(.78+.20*foreground)*(.88+.12*fract(abs(a.z)*1.73));"+
       "}";
     String fs="precision mediump float;varying vec3 color;varying float opacity;"+
       "void main(){vec2 q=gl_PointCoord-.5;float r=length(q)*2.;"+
-      "float core=1.-smoothstep(.20,.63,r);"+
-      "float halo=(1.-smoothstep(.24,1.,r))*.42;"+
+      "float core=1.-smoothstep(.12,.55,r);"+
+      "float halo=(1.-smoothstep(.22,1.,r))*.24;"+
       "gl_FragColor=vec4(color*(.75+.60*core),opacity*(core+halo));}";
     int v=shader(GLES20.GL_VERTEX_SHADER,vs),fr=shader(GLES20.GL_FRAGMENT_SHADER,fs);
     program=GLES20.glCreateProgram();GLES20.glAttachShader(program,v);GLES20.glAttachShader(program,fr);GLES20.glLinkProgram(program);
@@ -107,7 +107,7 @@ public class EnergyWallpaper extends WallpaperService {
    GLES20.glViewport(0,0,width,height);
    GLES20.glClearColor(.001f,.002f,.014f,1f);GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
    GLES20.glEnable(GLES20.GL_BLEND);
-   GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA,GLES20.GL_ONE);
+   GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA,GLES20.GL_ONE_MINUS_SRC_ALPHA);
    GLES20.glUseProgram(program);
    int a=GLES20.glGetAttribLocation(program,"a");
    points.position(0);GLES20.glEnableVertexAttribArray(a);
