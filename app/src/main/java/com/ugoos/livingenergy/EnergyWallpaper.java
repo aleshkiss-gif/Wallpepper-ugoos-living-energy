@@ -22,7 +22,7 @@ public class EnergyWallpaper extends WallpaperService {
   Handler handler;
   volatile boolean visible=false,ready=false;
   EGL10 egl;EGLDisplay display;EGLContext context;EGLSurface surface;
-  int backgroundProgram,bubbleProgram,texture,photoTexture;
+  int backgroundProgram,bubbleProgram,texture;
   FloatBuffer quad,points;
   long start;
   final int COUNT=3200;
@@ -118,45 +118,40 @@ public class EnergyWallpaper extends WallpaperService {
       "col+=gold*.025*vec3(1.,.78,.41);" +
       "gl_FragColor=vec4(clamp(col,0.,1.),1.);" +
       "}";
-    String fragment="precision highp float;varying vec2 uv;uniform sampler2D tex;uniform sampler2D photo;uniform float t;" +
-      "float wave(vec2 q){return .42*sin(q.x*14.+q.y*7.+t*.48)+.24*sin(q.x*27.-q.y*12.-t*.65)+.13*sin(q.x*52.+q.y*19.+t*.82);}" +
+    String fragment="precision highp float;varying vec2 uv;uniform sampler2D tex;uniform float t;" +
+      "float hash(float x){return fract(sin(x*127.13)*43758.5453);}" +
+      "float waves(vec2 p){return .35*sin(p.x*15.+p.y*7.+t*.56)+.22*sin(p.x*27.-p.y*14.-t*.74)+.12*sin(p.x*49.+p.y*19.+t*.93);}" +
       "void main(){" +
       "vec2 p=vec2(uv.x,1.-uv.y);float d=p.y;" +
-      "vec2 q=vec2(p.x*1.5,d*1.6);float w=wave(q);" +
-      "vec2 flow=fract(q+vec2(t*.029,t*.016));" +
-      "float n1=texture2D(tex,flow).r;" +
-      "float n2=texture2D(tex,fract(flow*1.91+vec2(-t*.024,t*.035))).r;" +
+      "vec2 q=vec2(p.x*2.4,d*1.9);float w=waves(q);" +
+      "vec2 f1=fract(q*.8+vec2(t*.045,t*.021)+vec2(w*.026));" +
+      "vec2 f2=fract(q*1.63+vec2(-t*.038,t*.032));" +
+      "float h1=texture2D(tex,f1).r;float h2=texture2D(tex,f2).r;" +
       "float e=.004;" +
-      "float dx=texture2D(tex,fract(flow+vec2(e,0.))).r-texture2D(tex,fract(flow-vec2(e,0.))).r;" +
-      "float dy=texture2D(tex,fract(flow+vec2(0.,e))).r-texture2D(tex,fract(flow-vec2(0.,e))).r;" +
-      "vec2 refractOffset=vec2(dx,dy)*(.032*exp(-d*3.)+.003);" +
-      "vec2 warped=uv+refractOffset+vec2(w*.009*exp(-d*2.),sin(q.x*9.+t*.39)*.004*exp(-d*2.));" +
-      "warped+=vec2(sin(uv.y*18.+t*.26)+sin(uv.y*39.-t*.44),cos(uv.x*17.+t*.31))*.0028;" +
-      "vec2 sampleUV=clamp(vec2(warped.x,1.-warped.y),vec2(.003),vec2(.997));" +
-      "vec3 photographic=texture2D(photo,sampleUV).rgb;" +
-      "vec3 deep=mix(vec3(.006,.16,.25),vec3(.001,.007,.029),pow(d,.85));" +
-      "vec3 col=mix(photographic,deep,.12+.26*smoothstep(.25,1.,d));" +
-      "float surface=1.-smoothstep(.045,.31,d);" +
-      "float center=exp(-pow((p.x-.52)*1.55,4.));" +
-      "float skylight=center*exp(-d*4.3);" +
-      "col+=skylight*vec3(.14,.17,.10);" +
-      "float glitter=pow(max(0.,n1*.62+n2*.38+.12*w-.47)*2.1,4.);" +
-      "float folds=pow(max(0.,sin(q.x*44.+w*3.+t*.6)*sin(q.y*21.-t*.43)),6.);" +
-      "col+=surface*(glitter*.31+folds*.15)*mix(vec3(.37,.83,1.),vec3(1.,.78,.38),.64*center);" +
-      "float sunSpec=pow(max(0.,1.-abs(p.x-.52)*1.5),4.)*exp(-d*11.);" +
-      "col+=sunSpec*.16*vec3(1.,.79,.43);" +
-      "float rays=0.;" +
-      "for(int i=0;i<32;i++){" +
-      "float k=float(i);float origin=.06+fract(k*.6180339)*.88;" +
-      "float slope=(fract(k*.754877)-.5)*.18;" +
-      "float pos=origin+slope*d+sin(t*.18+k*2.3)*.006;" +
-      "float diff=p.x-pos;" +
-      "float width=.00020+.00095*d+.0002*fract(k*.37);" +
-      "float strength=.32+.5*fract(k*.4142);" +
-      "rays+=exp(-diff*diff/width)*strength;" +
+      "vec2 grad=vec2(texture2D(tex,fract(f1+vec2(e,0.))).r-texture2D(tex,fract(f1-vec2(e,0.))).r,texture2D(tex,fract(f1+vec2(0.,e))).r-texture2D(tex,fract(f1-vec2(0.,e))).r);" +
+      "vec3 n=normalize(vec3(-grad*21.-vec2(cos(q.x*15.+t*.56),sin(q.y*7.-t*.44))*.16,1.));" +
+      "float surface=1.-smoothstep(.02,.39,d);" +
+      "vec3 col=mix(vec3(.007,.26,.34),vec3(.001,.012,.044),pow(d,.88));" +
+      "float sky=exp(-pow((p.x-.52)*1.38,4.))*exp(-d*3.8);" +
+      "col+=sky*vec3(.18,.20,.115);" +
+      "float sun=pow(max(0.,dot(n,normalize(vec3(.13,.18,1.)))),34.);" +
+      "float shimmer=pow(max(0.,h1*.59+h2*.41+.15*w-.44)*2.1,4.);" +
+      "float fold=pow(max(0.,sin(q.x*34.+w*4.+t*.7)*sin(q.y*27.-t*.53+w*2.)),6.);" +
+      "float horizon=.075+.015*sin(p.x*15.+t*.42)+.009*sin(p.x*37.-t*.62);" +
+      "float underside=1.-smoothstep(horizon-.01,horizon+.17,d);" +
+      "col+=surface*(.18*sun+.30*shimmer+.14*fold)*mix(vec3(.34,.77,.96),vec3(1.,.81,.45),.68*sky);" +
+      "col+=underside*(.08+.12*shimmer)*vec3(.31,.64,.75);" +
+      "float ray=0.;" +
+      "for(int i=0;i<40;i++){" +
+      "float k=float(i);float source=.07+.86*hash(k+1.);" +
+      "float slant=(hash(k+19.)-.5)*.18;" +
+      "float x=source+slant*d+.006*sin(t*.23+k*2.1);" +
+      "float wid=.00013+.00062*d+.00017*hash(k+7.);" +
+      "ray+=exp(-(p.x-x)*(p.x-x)/wid)*(.35+.65*hash(k+31.));" +
       "}" +
-      "col+=rays*.011*center*exp(-d*2.1)*vec3(.85,.81,.63);" +
-      "col=mix(col,col*vec3(.79,.93,1.),smoothstep(.24,1.,d)*.20);" +
+      "col+=ray*.009*exp(-d*2.8)*vec3(.79,.78,.61);" +
+      "float micro=pow(max(0.,h1*.65+h2*.35-.56)*2.,3.)*exp(-d*5.);" +
+      "col+=micro*.045*vec3(.42,.78,.84);" +
       "gl_FragColor=vec4(clamp(col,0.,1.),1.);" +
       "}";
     try{backgroundProgram=program(vertex,fragment);}catch(Exception shaderError){Log.e("LivingOcean","Advanced water shader failed, using safe renderer",shaderError);backgroundProgram=program(vertex,safeFragment);}
@@ -202,28 +197,6 @@ public class EnergyWallpaper extends WallpaperService {
     water.recycle();
     GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_WRAP_S,GLES20.GL_REPEAT);
     GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_WRAP_T,GLES20.GL_REPEAT);
-    // The existing photographic ocean asset is a stable fallback-independent visual layer.
-    int[] photoIds=new int[1];GLES20.glGenTextures(1,photoIds,0);photoTexture=photoIds[0];
-    GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,photoTexture);
-    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_MIN_FILTER,GLES20.GL_LINEAR);
-    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_MAG_FILTER,GLES20.GL_LINEAR);
-    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_WRAP_S,GLES20.GL_CLAMP_TO_EDGE);
-    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_WRAP_T,GLES20.GL_CLAMP_TO_EDGE);
-    Bitmap ocean=null;
-    String oceanAsset="ocean_bg.jpg";
-    try{getAssets().open("ocean_new.jpg").close();oceanAsset="ocean_new.jpg";}catch(java.io.IOException ignored){}
-    try(InputStream stream=getAssets().open(oceanAsset)){
-      ocean=BitmapFactory.decodeStream(stream);
-      if(ocean==null)throw new RuntimeException("Cannot decode ocean asset");
-      GLUtils.texImage2D(GLES20.GL_TEXTURE_2D,0,ocean,0);
-      Log.i("LivingOcean","Loaded ocean image: "+oceanAsset);
-    }catch(Exception assetError){
-      Log.e("LivingOcean","Photo asset unavailable; using solid fallback",assetError);
-      int[] fallbackPixel={android.graphics.Color.rgb(5,45,75)};
-      Bitmap fallback=Bitmap.createBitmap(1,1,Bitmap.Config.ARGB_8888);
-      fallback.setPixels(fallbackPixel,0,1,0,0,1,1);
-      GLUtils.texImage2D(GLES20.GL_TEXTURE_2D,0,fallback,0);fallback.recycle();
-    }finally{if(ocean!=null)ocean.recycle();}
     start=SystemClock.uptimeMillis();ready=true;
    }catch(Exception error){Log.e("LivingOcean","GPU initialization failed",error);ready=false;releaseGL();}
   }
@@ -239,8 +212,7 @@ public class EnergyWallpaper extends WallpaperService {
    GLES20.glUniform1f(GLES20.glGetUniformLocation(backgroundProgram,"t"),t);
    GLES20.glActiveTexture(GLES20.GL_TEXTURE0);GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,texture);
    GLES20.glUniform1i(GLES20.glGetUniformLocation(backgroundProgram,"tex"),0);
-   GLES20.glActiveTexture(GLES20.GL_TEXTURE1);GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,photoTexture);
-   GLES20.glUniform1i(GLES20.glGetUniformLocation(backgroundProgram,"photo"),1);
+
    GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP,0,4);GLES20.glDisableVertexAttribArray(loc);
    GLES20.glEnable(GLES20.GL_BLEND);GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA,GLES20.GL_ONE_MINUS_SRC_ALPHA);
    GLES20.glUseProgram(bubbleProgram);
