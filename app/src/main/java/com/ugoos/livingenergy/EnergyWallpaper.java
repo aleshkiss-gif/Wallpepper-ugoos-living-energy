@@ -97,20 +97,22 @@ public class EnergyWallpaper extends WallpaperService {
       "float spec=pow(max(0.,dot(n,normalize(vec3(.18,.30,1.)))),28.);" +
       "float caustic=pow(max(0.,h+.13*w-.46)*2.1,3.);" +
       "col+=near*(.16*spec+.23*caustic)*vec3(.43,.84,.97);" +
-      "float sky=exp(-pow((p.x-.53+sin(t*.13)*.016)*1.95,2.))*exp(-d*5.2);" +
-      "col+=sky*vec3(.24,.28,.22);" +
+      "float sky=(.78+.22*cos((p.x-.5)*3.0+sin(t*.09)*.12))*exp(-d*3.8);" +
+      "col+=sky*vec3(.12,.19,.20);" +
       "float beams=0.;" +
       "for(int i=0;i<15;i++){" +
-      "float k=float(i);float spread=(k-7.)*.095;" +
-      "float wobble=sin(t*.26+k*1.7)*.019+sin(t*.13+k*.7)*.009;" +
-      "float pos=.52+spread*(.12+d*.94)+wobble+sin(d*5.+t*.21+k)*.008;" +
+      "float k=float(i);float origin=(k+.5)/15.;" +
+      "float slope=.13*sin(k*2.39)+.035*cos(k*4.17);" +
+      "float wobble=sin(t*.21+k*1.7)*.012+sin(t*.12+k*.7)*.008;" +
+      "float pos=origin+slope*d+wobble+sin(d*4.+t*.18+k)*.007;" +
       "float diff=p.x-pos;" +
-      "float beam=exp(-diff*diff/(.0017+.0006*mod(k,3.)));" +
-      "beams+=beam*(.7+.3*sin(t*.37+k*1.3))*(1.-smoothstep(.12,.97,d));" +
+      "float width=.0025+d*.0035+.0008*mod(k,3.);" +
+      "float beam=exp(-diff*diff/width);" +
+      "beams+=beam*(.57+.28*sin(t*.31+k*1.3))*(1.-smoothstep(.15,.95,d));" +
       "}" +
-      "col+=beams*.105*vec3(.49,.83,.99);" +
-      "float gold=exp(-pow((p.x-.54)*5.,2.))*exp(-d*9.);" +
-      "col+=gold*.065*vec3(1.,.78,.41);" +
+      "col+=beams*.064*vec3(.49,.83,.99);" +
+      "float gold=(.65+.35*cos((p.x-.45)*2.4))*exp(-d*7.);" +
+      "col+=gold*.025*vec3(1.,.78,.41);" +
       "gl_FragColor=vec4(clamp(col,0.,1.),1.);" +
       "}";
     backgroundProgram=program(vertex,fragment);
