@@ -72,32 +72,43 @@ public class EnergyWallpaper extends WallpaperService {
     if(!egl.eglMakeCurrent(display,surface,surface,context))throw new RuntimeException("EGL makeCurrent failed");
     String vertex="attribute vec2 a; varying vec2 uv; void main(){uv=(a+1.0)*0.5;gl_Position=vec4(a,0.,1.);}";
     String fragment="precision highp float; varying vec2 uv; uniform sampler2D tex; uniform float t;" +
+      "float water(vec2 q){" +
+      "float h=.0;" +
+      "h+=.27*sin(q.x*14.+q.y*7.+t*.83);" +
+      "h+=.17*sin(q.x*25.-q.y*12.-t*1.13);" +
+      "h+=.11*sin(q.x*43.+q.y*18.+t*.69);" +
+      "h+=.08*sin(q.x*77.-q.y*27.-t*1.37);" +
+      "return h;" +
+      "}" +
       "void main(){" +
       "vec2 p=vec2(uv.x,1.-uv.y);float d=p.y;" +
-      "vec2 flow1=vec2(p.x*1.7+t*.012,p.y*1.8+t*.009);" +
-      "vec2 flow2=vec2(p.x*2.2-t*.009,p.y*2.1+t*.013);" +
-      "float a=texture2D(tex,fract(flow1)).r;" +
-      "float b=texture2D(tex,fract(flow2)).g;" +
-      "float e=.003;" +
-      "float ax=texture2D(tex,fract(flow1+vec2(e,0.))).r-a;" +
-      "float ay=texture2D(tex,fract(flow1+vec2(0.,e))).r-a;" +
-      "vec3 normal=normalize(vec3(-ax*38.,-ay*38.,1.));" +
-      "float surface=1.-smoothstep(.03,.42,d);" +
-      "vec3 col=mix(vec3(.009,.30,.46),vec3(.002,.013,.057),pow(d,.79));" +
-      "float gloss=pow(max(0.,dot(normal,normalize(vec3(.24,.25,1.)))),22.);" +
-      "float caustic=pow(max(0.,a*.7+b*.3-.49)*2.2,3.);" +
-      "col+=surface*(gloss*.34+caustic*.18)*vec3(.48,.9,1.);" +
-      "float glow=exp(-pow((p.x-.52)*2.4,2.))*exp(-d*6.);" +
-      "col+=glow*vec3(.15,.24,.22);" +
+      "float surface=1.-smoothstep(.055,.44,d);" +
+      "vec2 q=vec2(p.x*1.45,p.y*1.75);" +
+      "float h=water(q);" +
+      "float eps=.003;" +
+      "vec2 slope=vec2(water(q+vec2(eps,0.))-water(q-vec2(eps,0.)),water(q+vec2(0.,eps))-water(q-vec2(0.,eps)))/(2.*eps);" +
+      "vec3 normal=normalize(vec3(-slope*.065,1.));" +
+      "vec2 flow1=fract(q+vec2(t*.085,t*.035)+normal.xy*.028);" +
+      "vec2 flow2=fract(q*1.71+vec2(-t*.061,t*.074)-normal.xy*.022);" +
+      "float a=texture2D(tex,flow1).r;" +
+      "float b=texture2D(tex,flow2).r;" +
+      "vec3 col=mix(vec3(.008,.31,.49),vec3(.002,.012,.057),pow(d,.8));" +
+      "vec3 lightDir=normalize(vec3(.27,.35,1.));" +
+      "float spec=pow(max(0.,dot(normal,lightDir)),20.);" +
+      "float movingGlint=pow(max(0.,a*.53+b*.47+.22*h-.43)*2.,3.);" +
+      "float fold=pow(max(0.,sin(q.x*34.+h*5.+t*.9)*sin(q.y*19.-t*.68+h*3.)),4.);" +
+      "col+=surface*(.10*spec+.30*movingGlint+.16*fold)*vec3(.48,.86,1.);" +
+      "float glow=exp(-pow((p.x-.52+sin(t*.18)*.016)*2.1,2.))*exp(-d*6.);" +
+      "col+=glow*vec3(.17,.25,.24);" +
       "float beams=0.;" +
       "for(int i=0;i<12;i++){" +
       "float k=float(i);float angle=(k-5.5)*.11;" +
-      "float pos=.51+angle*(.12+d*.8)+sin(t*.23+k*1.3)*.019;" +
+      "float pos=.51+angle*(.12+d*.8)+sin(t*.25+k*1.3)*.02;" +
       "float diff=p.x-pos;" +
-      "beams+=exp(-diff*diff/(.0016+.0004*mod(k,3.)))*(.72+.28*sin(t*.32+k))*(1.-smoothstep(.15,.98,d));" +
+      "beams+=exp(-diff*diff/(.0016+.0004*mod(k,3.)))*(.72+.28*sin(t*.36+k))*(1.-smoothstep(.15,.98,d));" +
       "}" +
       "col+=beams*.082*vec3(.46,.83,1.);" +
-      "col+=surface*.045*vec3(.3,.72,.91);" +
+      "col+=surface*.038*vec3(.30,.72,.91);" +
       "gl_FragColor=vec4(clamp(col,0.,1.),1.);" +
       "}";
     backgroundProgram=program(vertex,fragment);
