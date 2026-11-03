@@ -79,7 +79,7 @@ public class EnergyWallpaper extends WallpaperService {
     surface=egl.eglCreateWindowSurface(display,configs[0],getSurfaceHolder(),null);
     if(!egl.eglMakeCurrent(display,surface,surface,context))throw new RuntimeException("EGL makeCurrent failed");
     String vertex="attribute vec2 a; varying vec2 uv; void main(){uv=(a+1.0)*0.5;gl_Position=vec4(a,0.,1.);}";
-    String fragment="precision highp float;varying vec2 uv;uniform sampler2D tex;uniform float t;" +
+    String safeFragment="precision highp float;varying vec2 uv;uniform sampler2D tex;uniform float t;" +
       "float wave(vec2 p){return .42*sin(p.x*12.+p.y*7.+t*.61)+.26*sin(p.x*27.-p.y*13.-t*.79)+.17*sin(p.x*51.+p.y*23.+t*.44);}" +
       "void main(){" +
       "vec2 p=vec2(uv.x,1.-uv.y);float d=p.y;" +
@@ -115,7 +115,46 @@ public class EnergyWallpaper extends WallpaperService {
       "col+=gold*.025*vec3(1.,.78,.41);" +
       "gl_FragColor=vec4(clamp(col,0.,1.),1.);" +
       "}";
-    backgroundProgram=program(vertex,fragment);
+    String fragment="precision highp float;varying vec2 uv;uniform sampler2D tex;uniform float t;" +
+      "float hash(float x){return fract(sin(x*127.1)*43758.5453);}" +
+      "float wave(vec2 p){return .42*sin(p.x*9.7+p.y*5.4+t*.48)+.24*sin(p.x*21.3-p.y*11.8-t*.72)+.12*sin(p.x*42.2+p.y*18.4+t*.92);}" +
+      "void main(){" +
+      "vec2 p=vec2(uv.x,1.-uv.y);float d=p.y;" +
+      "vec2 q=vec2(p.x*2.1,p.y*1.9);float w=wave(q);" +
+      "vec2 flow=fract(q*.75+vec2(t*.036,t*.018)+w*.022);" +
+      "vec2 flow2=fract(q*1.46+vec2(-t*.027,t*.031));" +
+      "float h=texture2D(tex,flow).r*.62+texture2D(tex,flow2).r*.38;" +
+      "float e=.004;" +
+      "float hx=texture2D(tex,fract(flow+vec2(e,0.))).r-texture2D(tex,fract(flow-vec2(e,0.))).r;" +
+      "float hy=texture2D(tex,fract(flow+vec2(0.,e))).r-texture2D(tex,fract(flow-vec2(0.,e))).r;" +
+      "vec3 normal=normalize(vec3(-hx*17.-cos(q.x*9.7+t*.48)*.12,-hy*17.,1.));" +
+      "float top=1.-smoothstep(.045,.31,d);" +
+      "vec3 deep=mix(vec3(.007,.21,.32),vec3(.001,.009,.036),pow(d,.92));" +
+      "float broad=(.83+.17*cos((p.x-.48)*2.4+sin(t*.1)*.08))*exp(-d*3.4);" +
+      "deep+=broad*vec3(.115,.21,.23);" +
+      "float ripples=pow(max(0.,dot(normal,normalize(vec3(.12,.22,1.)))),25.);" +
+      "float glint=pow(max(0.,h+.12*w-.42)*1.5,3.);" +
+      "float surfaceBand=exp(-pow((d-(.045+.014*sin(p.x*12.+t*.32)))*20.,2.));" +
+      "deep+=top*(.17*ripples+.15*glint)*vec3(.48,.85,1.);" +
+      "deep+=surfaceBand*.12*vec3(.37,.75,.93);" +
+      "float rays=0.;" +
+      "for(int i=0;i<13;i++){" +
+      "float k=float(i);float x0=(k+.35+hash(k+2.)*.3)/13.;" +
+      "float tilt=(hash(k+7.)-.5)*.25;" +
+      "float path=x0+tilt*d+sin(t*.17+k*1.9)*.012+sin(d*4.+t*.21+k)*.008;" +
+      "float width=.0017+.0042*d+hash(k+13.)*.0015;" +
+      "float beam=exp(-pow((p.x-path),2.)/width);" +
+      "float breath=.75+.25*sin(t*.24+k*2.1);" +
+      "rays+=beam*breath*(1.-smoothstep(.22,1.,d));" +
+      "}" +
+      "deep+=rays*.063*vec3(.38,.77,.94);" +
+      "float underwaterCaustics=pow(max(0.,h+.15*w-.51)*2.,3.)*exp(-d*5.);" +
+      "deep+=underwaterCaustics*.055*vec3(.27,.70,.86);" +
+      "float warmth=(.7+.3*cos(p.x*2.6))*exp(-d*8.);" +
+      "deep+=warmth*.019*vec3(1.,.73,.40);" +
+      "gl_FragColor=vec4(clamp(deep,0.,1.),1.);" +
+      "}";
+    try{backgroundProgram=program(vertex,fragment);}catch(Exception shaderError){Log.e("LivingOcean","Advanced water shader failed, using safe renderer",shaderError);backgroundProgram=program(vertex,safeFragment);}
     String bubbleVertex="attribute vec4 a;uniform float t;uniform float scale;varying float alpha;varying float seed;varying float depth;"+
       "void main(){float velocity=.038+(.85-a.z)*.10+a.w*.04;float y=fract(a.y+t*velocity);"+
       "float drift=sin(t*(.37+a.w*.55)+a.y*9.)*.009+sin(t*.18+a.w*24.)*.012;"+
