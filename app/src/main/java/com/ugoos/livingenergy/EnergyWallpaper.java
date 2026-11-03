@@ -130,7 +130,9 @@ public class EnergyWallpaper extends WallpaperService {
       "float dx=texture2D(tex,fract(flow+vec2(e,0.))).r-texture2D(tex,fract(flow-vec2(e,0.))).r;" +
       "float dy=texture2D(tex,fract(flow+vec2(0.,e))).r-texture2D(tex,fract(flow-vec2(0.,e))).r;" +
       "vec2 refractOffset=vec2(dx,dy)*(.032*exp(-d*3.)+.003);" +
-      "vec2 sampleUV=clamp(uv+refractOffset+vec2(w*.003*exp(-d*3.),0.),vec2(.003),vec2(.997));" +
+      "vec2 warped=uv+refractOffset+vec2(w*.009*exp(-d*2.),sin(q.x*9.+t*.39)*.004*exp(-d*2.));" +
+      "warped+=vec2(sin(uv.y*18.+t*.26)+sin(uv.y*39.-t*.44),cos(uv.x*17.+t*.31))*.0028;" +
+      "vec2 sampleUV=clamp(vec2(warped.x,1.-warped.y),vec2(.003),vec2(.997));" +
       "vec3 photographic=texture2D(photo,sampleUV).rgb;" +
       "vec3 deep=mix(vec3(.006,.16,.25),vec3(.001,.007,.029),pow(d,.85));" +
       "vec3 col=mix(photographic,deep,.12+.26*smoothstep(.25,1.,d));" +
