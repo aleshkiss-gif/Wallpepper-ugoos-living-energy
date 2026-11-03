@@ -14,7 +14,7 @@ public class EnergyWallpaper extends WallpaperService {
  @Override public Engine onCreateEngine(){return new WaveEngine();}
  class WaveEngine extends Engine {
   final HandlerThread thread=new HandlerThread("ParticleWaveGPU");
-  final int COLS=190,ROWS=110,COUNT=COLS*ROWS;
+  final int COLS=228,ROWS=108,COUNT=COLS*ROWS;
   Handler handler;
   volatile boolean visible=false,ready=false;
   EGL10 egl;EGLDisplay display;EGLContext context;EGLSurface surface;
@@ -59,37 +59,8 @@ public class EnergyWallpaper extends WallpaperService {
     context=egl.eglCreateContext(display,cfg[0],EGL10.EGL_NO_CONTEXT,new int[]{0x3098,2,EGL10.EGL_NONE});
     surface=egl.eglCreateWindowSurface(display,cfg[0],getSurfaceHolder(),null);
     if(!egl.eglMakeCurrent(display,surface,surface,context))throw new RuntimeException("eglMakeCurrent");
-    String vs="precision highp float;attribute vec3 a;uniform float t;uniform float pixelScale;varying vec3 color;varying float opacity;"+
-      "float wave(vec2 p){"+
-      "float far=1.-smoothstep(.08,.80,p.y);"+
-      "return (.075+.035*far)*sin(p.x*10.5+t*.42+p.y*4.)"+
-      "+(.047+.010*far)*sin(p.x*18.5-p.y*7.-t*.59)"+
-      "+.014*sin(p.x*39.+p.y*13.+t*.88);"+
-      "}"+
-      "void main(){"+
-      "vec2 p=a.xy;float depth=p.y;"+
-      "float h=wave(p);"+
-      "float x=(p.x-.5)*2.08*(1.0-.08*depth);"+
-      "float y=-1.06+depth*1.24+h*(.75-.35*depth);"+
-      "gl_Position=vec4(x,y,0.,1.);"+
-      "float foreground=1.-depth;"+
-      "gl_PointSize=clamp((3.2+6.2*foreground)*pixelScale,3.,14.);"+
-      "float streak=pow(max(0.,sin(p.x*17.+depth*13.+t*.22)),22.);"+
-      "float cyan=.5+.5*sin(p.x*7.+depth*5.+t*.24);"+
-      "float violet=.5+.5*sin(p.x*5.-depth*8.-t*.17+2.);"+
-      "float warm=pow(max(0.,sin(p.x*13.+depth*11.-t*.31)),24.)*.24;"+
-      "vec3 blue=vec3(.015,.25,.99),aqua=vec3(.02,.90,1.),purple=vec3(.44,.09,.98),pink=vec3(1.,.14,.72);"+
-      "color=mix(blue,aqua,cyan*.8);color=mix(color,purple,violet*.75);"+
-      "color=mix(color,pink,streak*.82);"+
-      "color=mix(color,vec3(1.,.72,.34),warm);"+
-      "color*=1.15+.65*streak+.08*sin(t*.7+p.x*31.+depth*19.);"+
-      "opacity=(.78+.20*foreground)*(.88+.12*fract(abs(a.z)*1.73));"+
-      "}";
-    String fs="precision mediump float;varying vec3 color;varying float opacity;"+
-      "void main(){vec2 q=gl_PointCoord-.5;float r=length(q)*2.;"+
-      "float core=1.-smoothstep(.12,.55,r);"+
-      "float halo=(1.-smoothstep(.22,1.,r))*.24;"+
-      "gl_FragColor=vec4(color*(.75+.60*core),opacity*(core+halo));}";
+    String vs="precision highp float;\nattribute vec3 a;uniform float t;uniform float pixelScale;\nvarying vec3 color;varying float opacity;\nfloat wave(vec2 p){\nfloat d=p.y;\nfloat amp=mix(.205,.035,smoothstep(.0,1.,d));\nreturn amp*(.62*sin(p.x*12.2+d*8.2-t*.48)+.30*sin(p.x*21.7-d*12.8+t*.69)+.08*sin(p.x*37.+d*21.-t*.37));\n}\nvoid main(){\nvec2 p=a.xy;float d=p.y;\nfloat h=wave(p);\nfloat x=(p.x-.5)*2.11*(1.-.06*d);\nfloat y=-.97+1.20*d+h*(1.-.32*d);\ngl_Position=vec4(x,y,0.,1.);\nfloat near=1.-d;\ngl_PointSize=clamp((2.7+4.3*pow(near,1.1))*pixelScale,2.2,10.);\nfloat slope=(wave(p+vec2(.003,0.))-wave(p-vec2(.003,0.)))/.006;\nfloat ridge=pow(max(0.,.5+.5*cos(p.x*13.2+d*10.3-t*.44)),18.);\nfloat glimmer=pow(max(0.,sin(p.x*22.7-d*15.4+t*.65)),28.);\nfloat travelling=pow(max(0.,sin(p.x*7.4+d*11.6-t*.46)),20.);\nfloat spec=pow(max(0.,.92-.27*abs(slope)),6.)*(.34+.66*ridge);\nfloat shimmer=pow(max(0.,sin(t*1.5+p.x*81.+d*63.+a.z*9.)),12.);\nfloat cyan=.5+.5*sin(p.x*8.2+d*9.4-t*.19);\nfloat violet=.5+.5*sin(p.x*5.6-d*8.2+t*.16+1.6);\nvec3 deep=vec3(.018,.085,.58);\nvec3 electric=vec3(.01,.74,1.);\nvec3 purple=vec3(.44,.075,1.);\nvec3 pink=vec3(1.,.13,.74);\ncolor=mix(deep,electric,.26+.67*cyan);\ncolor=mix(color,purple,.13+.52*violet);\ncolor=mix(color,pink,.50*glimmer);\nfloat gold=travelling*(.15+.85*ridge);\ncolor=mix(color,vec3(1.,.72,.32),gold*.75);\nfloat light=.67+.92*spec+.85*ridge+.62*glimmer+.72*shimmer;\ncolor*=light;\nopacity=mix(.88,.54,d)*(.78+.22*fract(abs(a.z)*1.73));\n}";
+    String fs="precision mediump float;\nvarying vec3 color;varying float opacity;\nvoid main(){\nvec2 q=gl_PointCoord-.5;float r=length(q)*2.;\nfloat core=1.-smoothstep(.22,.64,r);\nfloat halo=(1.-smoothstep(.18,1.,r))*.28;\ngl_FragColor=vec4(color*(.73+.63*core),opacity*(core+halo));\n}";
     int v=shader(GLES20.GL_VERTEX_SHADER,vs),fr=shader(GLES20.GL_FRAGMENT_SHADER,fs);
     program=GLES20.glCreateProgram();GLES20.glAttachShader(program,v);GLES20.glAttachShader(program,fr);GLES20.glLinkProgram(program);
     int[] ok=new int[1];GLES20.glGetProgramiv(program,GLES20.GL_LINK_STATUS,ok,0);
