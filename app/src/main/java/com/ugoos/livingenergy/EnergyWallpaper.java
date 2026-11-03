@@ -71,7 +71,32 @@ public class EnergyWallpaper extends WallpaperService {
     surface=egl.eglCreateWindowSurface(display,configs[0],getSurfaceHolder(),null);
     if(!egl.eglMakeCurrent(display,surface,surface,context))throw new RuntimeException("EGL makeCurrent failed");
     String vertex="attribute vec2 a; varying vec2 uv; void main(){uv=(a+1.0)*0.5;gl_Position=vec4(a,0.,1.);}";
-    String fragment="precision mediump float; varying vec2 uv; uniform sampler2D tex; uniform float t; void main(){vec2 p=vec2(uv.x,1.-uv.y); vec3 col=texture2D(tex,p).rgb; float shafts=0.; for(int i=0;i<9;i++){float k=float(i);float center=.5+(k-4.)*.082+sin(t*.23+k)*.009;float spread=abs(uv.x-(center+(0.5-uv.y)*(k-4.)*.11));shafts+=exp(-spread*spread/0.0018)*(1.-uv.y)*.022*(.8+.2*sin(t*.6+k));} col+=vec3(.42,.78,1.)*shafts;gl_FragColor=vec4(col,1.);}";
+    String fragment="precision highp float; varying vec2 uv; uniform sampler2D tex; uniform float t; "+
+      "void main(){"+
+      "vec2 p=vec2(uv.x,1.-uv.y);"+
+      "float surface=1.-smoothstep(.04,.32,p.y);"+
+      "float ripple=sin(p.x*39.+t*.85+sin(p.x*11.-t*.43)*2.)*.0025+"+
+      "sin(p.x*71.-t*.52)*.0015;"+
+      "vec2 sampleUv=p+vec2(ripple*surface,cos(p.x*45.-t*.63)*.0012*surface);"+
+      "vec3 col=texture2D(tex,clamp(sampleUv,0.,1.)).rgb;"+
+      "float shafts=0.;"+
+      "for(int i=0;i<13;i++){"+
+      "float k=float(i);"+
+      "float direction=(k-6.)*.075;"+
+      "float wave=sin(t*.37+k*.87)*.016+sin(t*.19+k*1.8)*.008;"+
+      "float center=.51+direction*.45+wave;"+
+      "float position=center+(p.y*direction*.7)+sin(p.y*4.+t*.28+k)*.009;"+
+      "float distance=abs(p.x-position);"+
+      "float beam=exp(-distance*distance/(.0008+.00015*mod(k,3.)));"+
+      "float pulse=.78+.22*sin(t*.47+k*1.7);"+
+      "shafts+=beam*pulse*(1.-smoothstep(.1,.94,p.y))*.032;"+
+      "}"+
+      "vec3 cool=vec3(.33,.77,1.);"+
+      "col+=shafts*cool;"+
+      "float caustic=(sin(p.x*87.+sin(p.x*22.+t*.7)*2.+t*.45)*.5+.5);"+
+      "col+=surface*caustic*.026*vec3(.55,.88,1.);"+
+      "gl_FragColor=vec4(col,1.);"+
+      "}";
     backgroundProgram=program(vertex,fragment);
     String bubbleVertex="attribute vec4 a; uniform float t; uniform float scale; varying float alpha; varying float rim; void main(){float speed=.06+a.z*.13;float y=fract(a.y+t*speed);float x=a.x+sin(t*(.5+a.w)+a.y*9.)*.012;gl_Position=vec4(x*2.-1.,y*2.-1.,0.,1.);gl_PointSize=(1.5+a.z*a.z*9.)*scale;alpha=.25+a.z*.6;rim=a.z;}";
     String bubbleFrag="precision mediump float; varying float alpha;varying float rim;void main(){vec2 q=gl_PointCoord-.5;float r=length(q)*2.;float edge=smoothstep(.72,.93,r)*(1.-smoothstep(.94,1.,r));float center=(1.-smoothstep(.0,.65,r))*.2;float shine=1.-smoothstep(.04,.23,length(q-vec2(-.2,-.2)));float a=(edge+center+shine*.65)*alpha;gl_FragColor=vec4(.65,.9,1.,a);}";
