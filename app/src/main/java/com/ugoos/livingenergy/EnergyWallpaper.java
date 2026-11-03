@@ -64,7 +64,7 @@ public class EnergyWallpaper extends WallpaperService {
     egl=(EGL10)EGLContext.getEGL();display=egl.eglGetDisplay(EGL10.EGL_DEFAULT_DISPLAY);
     egl.eglInitialize(display,new int[2]);
     EGLConfig[] configs=new EGLConfig[1];int[] count=new int[1];
-    int[] configAttrs={EGL10.EGL_RENDERABLE_TYPE,4,EGL10.EGL_RED_SIZE,8,EGL10.EGL_GREEN_SIZE,8,EGL10.EGL_BLUE_SIZE,8,EGL10.EGL_NONE};
+    int[] configAttrs={0x3040,4,EGL10.EGL_RED_SIZE,8,EGL10.EGL_GREEN_SIZE,8,EGL10.EGL_BLUE_SIZE,8,EGL10.EGL_NONE};
     egl.eglChooseConfig(display,configAttrs,configs,1,count);
     if(count[0]<1)throw new RuntimeException("No GLES2 config");
     context=egl.eglCreateContext(display,configs[0],EGL10.EGL_NO_CONTEXT,new int[]{0x3098,2,EGL10.EGL_NONE});
