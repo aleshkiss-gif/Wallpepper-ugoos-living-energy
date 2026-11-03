@@ -8,6 +8,7 @@ import android.opengl.GLUtils;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.SystemClock;
+import android.util.Log;
 import android.view.SurfaceHolder;
 import java.io.InputStream;
 import java.nio.*;
@@ -24,19 +25,26 @@ public class EnergyWallpaper extends WallpaperService {
   int backgroundProgram,bubbleProgram,texture;
   FloatBuffer quad,points;
   long start;
-  final int COUNT=1250;
-  final Runnable frame=new Runnable(){public void run(){if(!visible)return;try{if(ready)draw();}catch(Exception ignored){}if(visible)handler.postDelayed(this,16);}};
+  final int COUNT=1750;
+  final Runnable frame=new Runnable(){public void run(){if(!visible)return;try{if(ready)draw();}catch(Exception error){Log.e("LivingOcean","GPU frame failed",error);ready=false;}if(visible)handler.postDelayed(this,16);}};
   OceanEngine(){
    thread.start();handler=new Handler(thread.getLooper());
    float[] vertices={-1,-1,1,-1,-1,1,1,1};
    quad=buffer(vertices);
-   float[] particles=new float[COUNT*4];Random rng=new Random(73);
+   float[] particles=new float[COUNT*4];Random rng=new Random(731);
+   // Irregular plumes and dispersed particles, with broad size distribution.
+   float[] centers={.08f,.21f,.39f,.62f,.84f,.94f};
    for(int i=0;i<COUNT;i++){
-    float center=.12f+(i%5)*.19f;
-    particles[i*4]=Math.max(.01f,Math.min(.99f,center+(rng.nextFloat()-.5f)*.19f));
-    particles[i*4+1]=rng.nextFloat();
-    particles[i*4+2]=rng.nextFloat();
-    particles[i*4+3]=rng.nextFloat();
+     float plume=centers[rng.nextInt(centers.length)];
+     float scatter=rng.nextFloat();
+     float x=(scatter<.24f?rng.nextFloat():plume+(float)rng.nextGaussian()*(.025f+.09f*rng.nextFloat()));
+     particles[i*4]=Math.max(.01f,Math.min(.99f,x));
+     particles[i*4+1]=rng.nextFloat();
+     // Most are tiny, some medium and a few large foreground bubbles.
+     float category=rng.nextFloat();
+     particles[i*4+2]=category<.73f?rng.nextFloat()*.45f:
+       category<.95f?.45f+rng.nextFloat()*.35f:.8f+rng.nextFloat()*.2f;
+     particles[i*4+3]=rng.nextFloat();
    }
    points=buffer(particles);
   }
@@ -112,8 +120,22 @@ public class EnergyWallpaper extends WallpaperService {
       "gl_FragColor=vec4(clamp(col,0.,1.),1.);" +
       "}";
     backgroundProgram=program(vertex,fragment);
-    String bubbleVertex="attribute vec4 a; uniform float t; uniform float scale; varying float alpha; varying float rim; void main(){float speed=.06+a.z*.13;float y=fract(a.y+t*speed);float x=a.x+sin(t*(.5+a.w)+a.y*9.)*.012;gl_Position=vec4(x*2.-1.,y*2.-1.,0.,1.);gl_PointSize=(1.5+a.z*a.z*9.)*scale;alpha=.25+a.z*.6;rim=a.z;}";
-    String bubbleFrag="precision mediump float; varying float alpha;varying float rim;void main(){vec2 q=gl_PointCoord-.5;float r=length(q)*2.;float edge=smoothstep(.72,.93,r)*(1.-smoothstep(.94,1.,r));float center=(1.-smoothstep(.0,.65,r))*.2;float shine=1.-smoothstep(.04,.23,length(q-vec2(-.2,-.2)));float a=(edge+center+shine*.65)*alpha;gl_FragColor=vec4(.65,.9,1.,a);}";
+    String bubbleVertex="attribute vec4 a;uniform float t;uniform float scale;varying float alpha;varying float seed;varying float depth;"+
+      "void main(){float velocity=.038+(.85-a.z)*.10+a.w*.04;float y=fract(a.y+t*velocity);"+
+      "float drift=sin(t*(.37+a.w*.55)+a.y*9.)*.009+sin(t*.18+a.w*24.)*.012;"+
+      "float x=a.x+drift;gl_Position=vec4(x*2.-1.,y*2.-1.,0.,1.);"+
+      "float r=mix(1.4,22.,pow(a.z,3.3));gl_PointSize=r*scale;"+
+      "alpha=mix(.23,.68,a.z);seed=a.w;depth=a.z;}";
+    String bubbleFrag="precision mediump float;varying float alpha;varying float seed;varying float depth;"+
+      "void main(){vec2 q=gl_PointCoord-.5;"+
+      "q.x*=1.+.10*sin(seed*31.);q.y*=1.+.13*cos(seed*43.);"+
+      "float r=length(q)*2.;float irregular=.025*sin(atan(q.y,q.x)*5.+seed*19.);"+
+      "float edge=1.-smoothstep(.76+irregular,.97+irregular,r);"+
+      "float shell=smoothstep(.66,.87,r)*(1.-smoothstep(.91,1.,r));"+
+      "float glint=exp(-length((q-vec2(-.20,-.23))*9.)*length((q-vec2(-.20,-.23))*9.));"+
+      "float secondary=exp(-length((q-vec2(.25,.18))*15.)*length((q-vec2(.25,.18))*15.));"+
+      "float opacity=(shell*.64+glint*.72+secondary*.22+(.07+.12*depth)*edge)*alpha;"+
+      "gl_FragColor=vec4(mix(vec3(.52,.79,.94),vec3(.89,.97,1.),glint),opacity*edge);}";
     bubbleProgram=program(bubbleVertex,bubbleFrag);
     int[] ids=new int[1];GLES20.glGenTextures(1,ids,0);texture=ids[0];
     GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,texture);
@@ -139,7 +161,7 @@ public class EnergyWallpaper extends WallpaperService {
     GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_WRAP_S,GLES20.GL_REPEAT);
     GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_WRAP_T,GLES20.GL_REPEAT);
     start=SystemClock.uptimeMillis();ready=true;
-   }catch(Exception ignored){ready=false;releaseGL();}
+   }catch(Exception error){Log.e("LivingOcean","GPU initialization failed",error);ready=false;releaseGL();}
   }
   void draw(){
    if(!ready)return;
@@ -162,7 +184,7 @@ public class EnergyWallpaper extends WallpaperService {
    GLES20.glUniform1f(GLES20.glGetUniformLocation(bubbleProgram,"scale"),Math.max(1f,viewport[2]/1920f));
    GLES20.glDrawArrays(GLES20.GL_POINTS,0,COUNT);
    GLES20.glDisableVertexAttribArray(loc);GLES20.glDisable(GLES20.GL_BLEND);
-   egl.eglSwapBuffers(display,surface);
+   if(!egl.eglSwapBuffers(display,surface)){Log.e("LivingOcean","EGL swap failed: "+egl.eglGetError());ready=false;}
   }
   void releaseGL(){
    ready=false;
