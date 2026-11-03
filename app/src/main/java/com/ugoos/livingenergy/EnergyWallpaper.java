@@ -71,31 +71,42 @@ public class EnergyWallpaper extends WallpaperService {
     surface=egl.eglCreateWindowSurface(display,configs[0],getSurfaceHolder(),null);
     if(!egl.eglMakeCurrent(display,surface,surface,context))throw new RuntimeException("EGL makeCurrent failed");
     String vertex="attribute vec2 a; varying vec2 uv; void main(){uv=(a+1.0)*0.5;gl_Position=vec4(a,0.,1.);}";
-    String fragment="precision highp float; varying vec2 uv; uniform sampler2D tex; uniform float t; "+
-      "void main(){"+
-      "vec2 p=vec2(uv.x,1.-uv.y);"+
-      "float surface=1.-smoothstep(.04,.32,p.y);"+
-      "float ripple=sin(p.x*39.+t*.85+sin(p.x*11.-t*.43)*2.)*.0025+"+
-      "sin(p.x*71.-t*.52)*.0015;"+
-      "vec2 sampleUv=p+vec2(ripple*surface,cos(p.x*45.-t*.63)*.0012*surface);"+
-      "vec3 col=texture2D(tex,clamp(sampleUv,0.,1.)).rgb;"+
-      "float shafts=0.;"+
-      "for(int i=0;i<13;i++){"+
-      "float k=float(i);"+
-      "float direction=(k-6.)*.075;"+
-      "float wave=sin(t*.37+k*.87)*.016+sin(t*.19+k*1.8)*.008;"+
-      "float center=.51+direction*.45+wave;"+
-      "float position=center+(p.y*direction*.7)+sin(p.y*4.+t*.28+k)*.009;"+
-      "float distance=abs(p.x-position);"+
-      "float beam=exp(-distance*distance/(.0008+.00015*mod(k,3.)));"+
-      "float pulse=.78+.22*sin(t*.47+k*1.7);"+
-      "shafts+=beam*pulse*(1.-smoothstep(.1,.94,p.y))*.032;"+
-      "}"+
-      "vec3 cool=vec3(.33,.77,1.);"+
-      "col+=shafts*cool;"+
-      "float caustic=(sin(p.x*87.+sin(p.x*22.+t*.7)*2.+t*.45)*.5+.5);"+
-      "col+=surface*caustic*.026*vec3(.55,.88,1.);"+
-      "gl_FragColor=vec4(col,1.);"+
+    String fragment="precision highp float; varying vec2 uv; uniform sampler2D tex; uniform float t;" +
+      "float wave(vec2 p){return sin(p.x*18.+t*.42+sin(p.x*7.-t*.18))*0.5+sin(p.x*43.-t*.63)*.22+sin(p.x*87.+t*.35)*.09;}" +
+      "void main(){" +
+      "vec2 p=vec2(uv.x,1.-uv.y);" +
+      "float depth=clamp(p.y,0.,1.);" +
+      "vec3 deep=vec3(.002,.024,.085);" +
+      "vec3 upper=vec3(.014,.38,.57);" +
+      "vec3 col=mix(upper,deep,pow(depth,.85));" +
+      "float surfaceMask=1.-smoothstep(.045,.27,depth);" +
+      "float w=wave(vec2(p.x,depth));" +
+      "float w2=wave(vec2(p.x*1.31+.13,depth));" +
+      "float crest=sin(p.x*69.+w*3.-t*.62)*sin(p.x*23.-t*.35);" +
+      "float glint=pow(max(0.,crest),7.);" +
+      "col+=surfaceMask*(.06+.21*glint)*vec3(.36,.84,1.);" +
+      "float surfaceLine=.055+.013*sin(p.x*19.+t*.43)+.007*sin(p.x*46.-t*.67);" +
+      "float line=exp(-pow((depth-surfaceLine)*135.,2.));" +
+      "col+=line*.19*vec3(.44,.92,1.);" +
+      "float sun=exp(-pow((p.x-.52+sin(t*.09)*.015)*2.1,2.))*exp(-depth*7.);" +
+      "col+=sun*vec3(.19,.29,.29);" +
+      "float shafts=0.;" +
+      "for(int i=0;i<12;i++){" +
+      "float k=float(i);" +
+      "float angle=(k-5.5)*.115;" +
+      "float shift=sin(t*.31+k*1.39)*.018+sin(t*.17+k*.83)*.009;" +
+      "float center=.51+angle*(.18+depth*.85)+shift+sin(depth*5.+t*.24+k)*.007;" +
+      "float dist=abs(p.x-center);" +
+      "float beam=exp(-dist*dist/(.00042+.00019*mod(k,3.)));" +
+      "float intensity=.68+.32*sin(t*.37+k*1.47);" +
+      "shafts+=beam*intensity*(1.-smoothstep(.14,.96,depth));" +
+      "}" +
+      "col+=shafts*.073*vec3(.38,.83,1.);" +
+      "float caustic=pow(max(0.,sin(p.x*91.+w2*4.+t*.52)*sin(p.x*41.-t*.31)),5.);" +
+      "col+=caustic*surfaceMask*.095*vec3(.43,.89,1.);" +
+      "float mist=(sin(p.x*34.+depth*25.+t*.09)*sin(depth*52.-p.x*19.-t*.08))*.5+.5;" +
+      "col+=mist*.009*vec3(.15,.53,.75);" +
+      "gl_FragColor=vec4(clamp(col,0.,1.),1.);" +
       "}";
     backgroundProgram=program(vertex,fragment);
     String bubbleVertex="attribute vec4 a; uniform float t; uniform float scale; varying float alpha; varying float rim; void main(){float speed=.06+a.z*.13;float y=fract(a.y+t*speed);float x=a.x+sin(t*(.5+a.w)+a.y*9.)*.012;gl_Position=vec4(x*2.-1.,y*2.-1.,0.,1.);gl_PointSize=(1.5+a.z*a.z*9.)*scale;alpha=.25+a.z*.6;rim=a.z;}";
