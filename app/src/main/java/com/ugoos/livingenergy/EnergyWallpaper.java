@@ -3,6 +3,7 @@ package com.ugoos.livingenergy;
 import android.service.wallpaper.WallpaperService;
 import android.opengl.GLES20;
 import android.os.Handler;
+import android.content.SharedPreferences;
 import android.os.HandlerThread;
 import android.os.SystemClock;
 import android.util.Log;
@@ -20,6 +21,8 @@ public class EnergyWallpaper extends WallpaperService {
   EGL10 egl;EGLDisplay display;EGLContext context;EGLSurface surface;
   FloatBuffer points;
   int program;
+  SharedPreferences prefs;
+  int uTime,uScale,uLight,uGlints;
   long start;
   int width=1920,height=1080;
   final Runnable frame=new Runnable(){@Override public void run(){
@@ -29,6 +32,7 @@ public class EnergyWallpaper extends WallpaperService {
   }};
   WaveEngine(){
    thread.start();handler=new Handler(thread.getLooper());
+   prefs=getSharedPreferences("energy",MODE_PRIVATE);
    float[] data=new float[COUNT*3];int k=0;
    for(int j=0;j<ROWS;j++)for(int i=0;i<COLS;i++){
     data[k++]=i/(float)(COLS-1);
@@ -59,7 +63,7 @@ public class EnergyWallpaper extends WallpaperService {
     context=egl.eglCreateContext(display,cfg[0],EGL10.EGL_NO_CONTEXT,new int[]{0x3098,2,EGL10.EGL_NONE});
     surface=egl.eglCreateWindowSurface(display,cfg[0],getSurfaceHolder(),null);
     if(!egl.eglMakeCurrent(display,surface,surface,context))throw new RuntimeException("eglMakeCurrent");
-    String vs="precision highp float;\nattribute vec3 a;uniform float t;uniform float pixelScale;\nvarying vec3 color;varying float opacity;\nfloat wave(vec2 p){\nfloat x=p.x,z=p.y;\nfloat back=smoothstep(.0,1.,z);\nfloat a1=mix(.115,.21,back);\nfloat h=a1*sin(x*9.5+z*6.1-t*.42);\nh+=.095*sin(x*17.8-z*9.2+t*.59);\nh+=.057*sin(x*27.5+z*17.4-t*.76);\nh+=.021*sin(x*48.-z*23.+t*1.1);\nreturn h;\n}\nvoid main(){\nvec2 p=a.xy;float z=p.y;\nfloat h=wave(p);\nfloat x=(p.x-.5)*2.18;\nfloat y=-.76+1.35*pow(z,.75)+h*(.85-.20*z);\ngl_Position=vec4(x,y,0.,1.);\nfloat foreground=1.-z;\ngl_PointSize=clamp((2.4+5.1*pow(foreground,1.5))*pixelScale,1.5,11.);\nfloat dx=(wave(p+vec2(.002,0.))-wave(p-vec2(.002,0.)))/.004;\nfloat dz=(wave(p+vec2(0.,.002))-wave(p-vec2(0.,.002)))/.004;\nvec3 n=normalize(vec3(-dx*.27,1.,-dz*.18));\nvec3 lightDir=normalize(vec3(.18,.85,.49));\nfloat spec=pow(max(0.,dot(n,lightDir)),13.);\nfloat crest=pow(max(0.,.5+.5*sin(p.x*9.5+z*6.1-t*.42)),9.);\nfloat track=pow(max(0.,sin(p.x*14.3-z*18.1+t*.37)),22.);\nfloat flicker=pow(max(0.,sin(t*1.7+p.x*97.+z*71.+a.z*13.)),16.);\nfloat cyan=.5+.5*sin(p.x*7.5+z*6.2-t*.18);\nfloat violet=.5+.5*sin(p.x*5.8-z*10.2+t*.13+1.7);\nvec3 blue=vec3(.008,.15,.77);\nvec3 aqua=vec3(.015,.84,1.);\nvec3 purple=vec3(.43,.055,1.);\nvec3 pink=vec3(1.,.10,.74);\ncolor=mix(blue,aqua,.22+.64*cyan);\ncolor=mix(color,purple,.15+.54*violet);\ncolor=mix(color,pink,track*.48);\nfloat gold=pow(max(0.,spec),2.)*crest*.75;\ncolor=mix(color,vec3(1.,.72,.33),gold);\ncolor*=.64+1.22*spec+.72*crest+.70*flicker+.55*track;\nopacity=(.66+.27*foreground)*(.77+.23*fract(abs(a.z)*1.73));\n}";
+    String vs="precision highp float;\nattribute vec3 a;uniform float t;uniform float pixelScale;uniform float glints;uniform float brightness;\nvarying vec3 color;varying float opacity;\nfloat wave(vec2 p){\nfloat x=p.x,z=p.y;\nfloat back=smoothstep(.0,1.,z);\nfloat a1=mix(.115,.21,back);\nfloat h=a1*sin(x*9.5+z*6.1-t*.42);\nh+=.095*sin(x*17.8-z*9.2+t*.59);\nh+=.057*sin(x*27.5+z*17.4-t*.76);\nh+=.021*sin(x*48.-z*23.+t*1.1);\nreturn h;\n}\nvoid main(){\nvec2 p=a.xy;float z=p.y;\nfloat h=wave(p);\nfloat x=(p.x-.5)*2.18;\nfloat y=-.76+1.35*pow(z,.75)+h*(.85-.20*z);\ngl_Position=vec4(x,y,0.,1.);\nfloat foreground=1.-z;\ngl_PointSize=clamp((2.4+5.1*pow(foreground,1.5))*pixelScale,1.5,11.);\nfloat dx=(wave(p+vec2(.002,0.))-wave(p-vec2(.002,0.)))/.004;\nfloat dz=(wave(p+vec2(0.,.002))-wave(p-vec2(0.,.002)))/.004;\nvec3 n=normalize(vec3(-dx*.27,1.,-dz*.18));\nvec3 lightDir=normalize(vec3(.18,.85,.49));\nfloat spec=pow(max(0.,dot(n,lightDir)),13.);\nfloat crest=pow(max(0.,.5+.5*sin(p.x*9.5+z*6.1-t*.42)),9.);\nfloat track=pow(max(0.,sin(p.x*14.3-z*18.1+t*.37)),22.);\nfloat seed=fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);\nfloat phase=t*(.55+seed*.95)+seed*6.28318;\nfloat flicker=pow(max(0.,sin(phase)),22.)*step(.88,seed);\nfloat traveling=pow(max(0.,dot(n,normalize(vec3(.22+.18*sin(t*.21),.86,.43)))),42.);\nfloat sparkle=(flicker*.95+traveling*.32)*glints;\nfloat cyan=.5+.5*sin(p.x*7.5+z*6.2-t*.18);\nfloat violet=.5+.5*sin(p.x*5.8-z*10.2+t*.13+1.7);\nvec3 blue=vec3(.008,.15,.77);\nvec3 aqua=vec3(.015,.84,1.);\nvec3 purple=vec3(.43,.055,1.);\nvec3 pink=vec3(1.,.10,.74);\ncolor=mix(blue,aqua,.22+.64*cyan);\ncolor=mix(color,purple,.15+.54*violet);\ncolor=mix(color,pink,track*.48);\nfloat gold=pow(max(0.,spec),2.)*crest*.75;\ncolor=mix(color,vec3(1.,.72,.33),gold);\ncolor*=.64+1.22*spec+.72*crest+.55*track+sparkle;\nfloat haze=smoothstep(.02,.98,z);\ncolor*=mix(1.10,.56,haze)*brightness;\ncolor+=vec3(.05,.22,.42)*sparkle*.35;\nopacity=(.66+.27*foreground)*(.77+.23*fract(abs(a.z)*1.73))*mix(1.,.74,haze);\n}";
     String fs="precision mediump float;\nvarying vec3 color;varying float opacity;\nvoid main(){\nvec2 q=gl_PointCoord-.5;float r=length(q)*2.;\nfloat core=1.-smoothstep(.22,.64,r);\nfloat halo=(1.-smoothstep(.18,1.,r))*.28;\ngl_FragColor=vec4(color*(.73+.63*core),opacity*(core+halo));\n}";
     int v=shader(GLES20.GL_VERTEX_SHADER,vs),fr=shader(GLES20.GL_FRAGMENT_SHADER,fs);
     program=GLES20.glCreateProgram();GLES20.glAttachShader(program,v);GLES20.glAttachShader(program,fr);GLES20.glLinkProgram(program);
@@ -69,12 +73,18 @@ public class EnergyWallpaper extends WallpaperService {
     android.graphics.Rect bounds=getSurfaceHolder().getSurfaceFrame();
     width=Math.max(1,bounds.width());height=Math.max(1,bounds.height());
     GLES20.glViewport(0,0,width,height);
+    uTime=GLES20.glGetUniformLocation(program,"t");
+    uScale=GLES20.glGetUniformLocation(program,"pixelScale");
+    uLight=GLES20.glGetUniformLocation(program,"brightness");
+    uGlints=GLES20.glGetUniformLocation(program,"glints");
     start=SystemClock.uptimeMillis();ready=true;
     Log.i("ParticleWave","GPU particle wave initialized, particles="+COUNT);
    }catch(Exception e){Log.e("ParticleWave","Init failed",e);ready=false;releaseGL();}
   }
   void draw(){
-   float t=(SystemClock.uptimeMillis()-start)/1000f;
+   float speed=.45f+prefs.getInt("speed",45)/100f*1.25f;
+   if(prefs.getBoolean("dynamic",false))speed*=1.18f;
+   float t=(SystemClock.uptimeMillis()-start)/1000f*speed;
    GLES20.glViewport(0,0,width,height);
    GLES20.glClearColor(.001f,.002f,.014f,1f);GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
    GLES20.glEnable(GLES20.GL_BLEND);
@@ -83,8 +93,10 @@ public class EnergyWallpaper extends WallpaperService {
    int a=GLES20.glGetAttribLocation(program,"a");
    points.position(0);GLES20.glEnableVertexAttribArray(a);
    GLES20.glVertexAttribPointer(a,3,GLES20.GL_FLOAT,false,0,points);
-   GLES20.glUniform1f(GLES20.glGetUniformLocation(program,"t"),t);
-   GLES20.glUniform1f(GLES20.glGetUniformLocation(program,"pixelScale"),Math.max(1f,width/1920f));
+   GLES20.glUniform1f(uTime,t);
+   GLES20.glUniform1f(uScale,Math.max(1f,width/1920f));
+   GLES20.glUniform1f(uLight,.55f+prefs.getInt("light",70)/100f*.75f);
+   GLES20.glUniform1f(uGlints,prefs.getInt("glints",55)/100f*1.8f);
    GLES20.glDrawArrays(GLES20.GL_POINTS,0,COUNT);
    GLES20.glDisableVertexAttribArray(a);GLES20.glDisable(GLES20.GL_BLEND);
    if(!egl.eglSwapBuffers(display,surface)){Log.e("ParticleWave","Swap failed "+egl.eglGetError());ready=false;}
